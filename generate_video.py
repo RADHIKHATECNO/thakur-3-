@@ -1,0 +1,229 @@
+import asyncio
+import os
+import sys
+import time
+import requests
+from playwright.async_api import async_playwright
+
+BOT_TOKEN = os.getenv("BOT_TOKEN", "")
+CHAT_ID = os.getenv("CHAT_ID", "")
+
+# 🚨 Pipeline folders
+IMAGE_DIR = "scene_images"
+VIDEO_DIR = "generated_videos"
+
+os.makedirs(VIDEO_DIR, exist_ok=True)
+
+def send_telegram_photo(photo_path, caption=""):
+    if not BOT_TOKEN or not CHAT_ID:
+        return
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
+    try:
+        if os.path.exists(photo_path):
+            with open(photo_path, "rb") as file:
+                requests.post(url, data={"chat_id": CHAT_ID, "caption": caption}, files={"photo": file}, timeout=20)
+    except Exception as e:
+        print(f"⚠️ Telegram photo error: {e}")
+
+def send_telegram_video(video_path, caption=""):
+    if not BOT_TOKEN or not CHAT_ID:
+        return
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendVideo"
+    try:
+        if os.path.exists(video_path):
+            with open(video_path, "rb") as file:
+                requests.post(url, data={"chat_id": CHAT_ID, "caption": caption}, files={"video": file}, timeout=120)
+    except Exception as e:
+        print(f"⚠️ Telegram upload error: {e}")
+
+async def live_screenshot_monitor(page, machine_id, stop_event):
+    """Bulletproof Screenshot Tracker"""
+    shot_count = 1
+    while not stop_event.is_set():
+        await asyncio.sleep(25) # 🚨 25 sec delay so Telegram doesn't block it as SPAM
+        if stop_event.is_set():
+            break
+        try:
+            shot_path = os.path.join(VIDEO_DIR, f"live_video_m{machine_id}.png")
+            # Page load hone ke time crash na ho isliye timeout laga diya hai
+            await page.screenshot(path=shot_path, timeout=5000)
+            send_telegram_photo(shot_path, f"🎬 [Machine {machine_id}] Upsampler Status #{shot_count}")
+            shot_count += 1
+            print(f"📸 Live Screenshot #{shot_count-1} sent for Machine {machine_id}")
+        except Exception as e:
+            print(f"⚠️ Could not take screenshot this time (Page loading): {e}")
+
+def read_video_prompts():
+    if not os.path.exists("prompts.txt"):
+        return {}
+    with open("prompts.txt", "r", encoding="utf-8") as f:
+        lines = f.readlines()
+    
+    video_prompts = {}
+    for idx, line in enumerate(lines, start=1):
+        if "|" in line:
+            video_prompts[idx] = line.split("|")[1].strip()
+        else:
+            video_prompts[idx] = line.strip()
+    return video_prompts
+
+
+async def main():
+    machine_id = int(sys.argv[1]) if len(sys.argv) > 1 else 1
+    video_prompts = read_video_prompts()
+    
+    img_name = f"scene_{machine_id}.jpg"
+    img_path = os.path.join(IMAGE_DIR, img_name)
+
+    if not os.path.exists(img_path):
+        print(f"⚠️ Image {img_name} not found! Fallback to bing folder...")
+        img_path = os.path.join("bing_automated_images", f"Generated_Image_{machine_id}.jpg")
+        if not os.path.exists(img_path):
+             print(f"❌ Image not found anywhere for Machine {machine_id}.")
+             return
+
+    motion_prompt = video_prompts.get(machine_id, "Cinematic slow motion movement, foley sound, no bgm")
+    print(f"🖥️ Machine {machine_id} processing IMAGE-TO-VIDEO with brand new Browser Loop.")
+
+    async with async_playwright() as p:
+        max_browser_restarts = 10  
+        
+        for attempt in range(1, max_browser_restarts + 1):
+            print(f"\n🔄 [Attempt {attempt}/{max_browser_restarts}] Opening FRESH Browser...")
+            
+            browser = await p.chromium.launch(headless=True)
+            context = await browser.new_context(accept_downloads=True, viewport={'width': 1280, 'height': 720})
+            page = await context.new_page()
+
+            # 🚨 Start safe screenshot tracker
+            stop_tracker = asyncio.Event()
+            asyncio.create_task(live_screenshot_monitor(page, machine_id, stop_tracker))
+
+            try:
+                await page.goto("https://upsampler.com/free-video-generator-no-signup", wait_until="domcontentloaded", timeout=60000)
+                await asyncio.sleep(3)
+
+                try:
+                    accept_btn = page.get_by_role("button", name="Accept")
+                    if await accept_btn.is_visible(timeout=3000):
+                        await accept_btn.click()
+                except Exception:
+                    pass
+
+                # Image Upload
+                file_input = page.locator("input[type='file']").first
+                await file_input.set_input_files(img_path)
+                await asyncio.sleep(3)
+
+                # Text Prompt
+                selectors = [
+                    "input[placeholder*='prompt' i]",
+                    "textarea[placeholder*='prompt' i]",
+                    "input[placeholder*='Describe' i]",
+                    "textarea[placeholder*='Describe' i]",
+                    "textarea"
+                ]
+                for sel in selectors:
+                    loc = page.locator(sel).first
+                    if await loc.is_visible(timeout=2000):
+                        try:
+                            await loc.fill(motion_prompt)
+                            break
+                        except Exception:
+                            continue
+
+                # 5 Seconds
+                try:
+                    duration_dropdown = page.get_by_text("3 seconds")
+                    if await duration_dropdown.is_visible(timeout=3000):
+                        await duration_dropdown.click()
+                        await asyncio.sleep(1)
+                        await page.get_by_text("5 seconds", exact=True).click()
+                        print("⏳ 5 seconds duration selected!")
+                except Exception:
+                    pass
+
+                # Generate
+                generate_btn = page.get_by_role("button", name="Generate Video", exact=True)
+                if not await generate_btn.is_visible(timeout=3000):
+                    generate_btn = page.locator("button:has-text('Generate')").first
+
+                if await generate_btn.is_visible():
+                    await generate_btn.click()
+                
+                await asyncio.sleep(8)
+
+                # Limit checks
+                gpu_error = page.get_by_text("free GPUs are in high demand", exact=False)
+                ip_limit_error = page.get_by_text("used up today", exact=False)
+
+                if await ip_limit_error.is_visible() or await gpu_error.is_visible():
+                    print(f"⚠️ Limit/GPU Error on Attempt {attempt}! Killing browser and starting fresh...")
+                    stop_tracker.set()
+                    await browser.close()
+                    await asyncio.sleep(5)
+                    continue 
+
+                print("✅ Generation Started! Waiting up to 6 minutes...")
+                see_result_btn = page.locator("button:has-text('See result'), a:has-text('See result')").first
+                video_element = page.locator("video:not([src*='_static'])").first
+
+                start_time = time.time()
+                video_ready = False
+
+                while time.time() - start_time < 360:
+                    await asyncio.sleep(5)
+                    
+                    if await ip_limit_error.is_visible() or await gpu_error.is_visible():
+                         print("⚠️ Error popped up during wait! Restarting...")
+                         break 
+                         
+                    if await see_result_btn.is_visible():
+                        await see_result_btn.click()
+                        await asyncio.sleep(2)
+
+                    if await video_element.count() > 0 and await video_element.is_visible():
+                        video_ready = True
+                        break
+
+                if video_ready:
+                    stop_tracker.set() # Stop tracker before taking final shot
+                    await asyncio.sleep(2)
+                    
+                    pre_video_shot = os.path.join(VIDEO_DIR, f"pre_video_m{machine_id}.png")
+                    await page.screenshot(path=pre_video_shot)
+                    send_telegram_photo(pre_video_shot, f"📸 Video #{machine_id} Preview! Downloading now...")
+                    await asyncio.sleep(4)
+
+                    video_filename = os.path.join(VIDEO_DIR, f"video_{machine_id}.mp4")
+                    video_src = await video_element.get_attribute("src")
+
+                    if video_src:
+                        download_btn = page.locator("a:has-text('Download'), button:has-text('Download')").first
+                        if await download_btn.is_visible():
+                            async with page.expect_download() as download_info:
+                                await download_btn.click()
+                            download = await download_info.value
+                            await download.save_as(video_filename)
+                        else:
+                            v_data = requests.get(video_src).content
+                            with open(video_filename, "wb") as f:
+                                f.write(v_data)
+
+                        print(f"🎉 Video #{machine_id} Downloaded Successfully!")
+                        send_telegram_video(video_filename, f"🎬 Scene #{machine_id} Final Video Ready!")
+                        
+                        await browser.close()
+                        return 
+
+            except Exception as e:
+                print(f"⚠️ Something crashed: {e}. Restarting browser...")
+            
+            stop_tracker.set()
+            await browser.close()
+            await asyncio.sleep(5)
+
+        print(f"❌ Failed to generate video #{machine_id} after {max_browser_restarts} fresh attempts.")
+
+if __name__ == "__main__":
+    asyncio.run(main())
