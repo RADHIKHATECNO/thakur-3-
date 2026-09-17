@@ -1,20 +1,60 @@
-10 sec | A small bear cub slipping on a frozen waterfall, desperately clinging to a thin branch as a massive blizzard rages.
-10 sec | A ragged orange fox sprinting through a collapsing junk yard, holding tightly onto a shiny lost locket.
-40 sec | A deer boy with broken horns dodging falling trees and flying debris in a violently windy dark forest.
-30 sec | A tiny rabbit burrowing frantically as its underground home starts to collapse from heavy rain flooding above.
-45 sec | A mother bear shielding her cub from a massive snow avalanche, pushing aggressively through deep freezing snow.
-50 sec | A lone penguin sliding uncontrollably down a massive cracking glacier, trying to reach the ocean before the ice shatters.
-35 sec | A fluffy white wolf pup tumbling down a steep snowy mountain, desperately trying to catch a falling glowing leaf.
-40 sec | A lost seal pup swimming frantically through a dark dangerous maze of sharp underwater ice crystals.
-45 sec | A shivering husky pulling a broken wooden sled through a blinding freezing blizzard, refusing to stop despite exhaustion.
-30 sec | A snow leopard jumping frantically across melting sinking ice chunks on a roaring dark river.
-50 sec | A rusty forgotten robot running through a futuristic scrapyard to save a fragile glowing flower from a massive dust storm.
-40 sec | A small alien child running away in terror from towering dark silhouettes in an abandoned rainy space port.
-35 sec | A toy soldier coming to life, struggling and crawling through a muddy flooded garden to return to its owner's house.
-45 sec | A mechanical bird with a broken wing hopping frantically to escape a violently rising dark tide on a rocky beach.
-60 sec | A discarded plush bunny getting washed down a rushing city gutter, fighting desperately to stay afloat in the dark water.
-40 sec | A baby elephant sliding down a steep muddy ravine, trying to desperately follow its herd in the pouring rain.
-35 sec | A sad monkey running through a crowded, uncaring city street in the rain holding a torn photograph of its family.
-50 sec | A tiny dragon who cannot fly, sprinting up a crumbling stone tower to escape a massive dark flood rushing below.
-30 sec | A scared raccoon darting aggressively through heavy street traffic in the rain to rescue a dropped shiny coin.
-45 sec | A homeless kitten dragging a heavy, wet blanket through a dark windy alleyway while a violent thunderstorm rages.
+45 sec | A rogue cyberpunk hacker sprinting across a breaking glass bridge over a neon city while dark drones chase him.
+35 sec | A mechanical android child hiding in a rainy metallic alleyway, crying tears of glowing blue oil.
+50 sec | A young female runner dodging flying hover-cars crashing into skyscrapers during a magnetic storm.
+40 sec | A futuristic soldier dragging an injured comrade through a collapsing, rusty metallic spaceship corridor.
+45 sec | A brave cyborg dog running through a neon-lit garbage dump, searching for its human master.
+35 sec | A young scavenger leaping between floating magnetic cargo containers in a high-tech dusty wasteland.
+55 sec | A human rebel hacking a massive steel door while violent security robots approach from the shadows.
+40 sec | A blind sci-fi monk using a glowing staff to navigate a crumbling, stormy futuristic temple.
+45 sec | A young boy in a robotic exosuit lifting a heavy fallen metal pillar to save a trapped citizen.
+50 sec | A rogue drone pilot running across a narrow neon sign high above a foggy, rainy cyberpunk city.
+35 sec | A mechanical tiger running fiercely through a metallic jungle, escaping a massive chemical explosion.
+45 sec | A futuristic female sniper sliding down a steep glass building, shooting cables to slow her fall.
+55 sec | A young engineer frantically fixing a broken flying car engine while it plummets towards the ground.
+40 sec | A brave human rebel swinging on a glowing energy whip across a massive, dark technological chasm.
+50 sec | A cyber-enhanced street kid running from a massive storm of acidic green rain in the slums.
+35 sec | A glowing artificial owl flying through a maze of massive moving gears in a giant factory.
+45 sec | A terrified scientist locking herself inside a glass pod while dark alien shadows pound on the door.
+40 sec | A young hacker leaping off a skyscraper, deploying a glowing digital parachute at the last second.
+50 sec | A robotic knight standing firm on a neon bridge, holding back a swarm of mechanical spiders.
+35 sec | A young girl with glowing robotic eyes running through a collapsing virtual reality simulation.
+45 sec | A brave space marine driving a damaged hover-bike through a massive, violent red sandstorm.
+55 sec | A rogue AI android carrying a human baby through a freezing, desolate futuristic snowy wasteland.
+40 sec | A young mechanic sliding under a closing heavy blast door just before it slams shut entirely.
+50 sec | A female cyberpunk mercenary dodging glowing laser traps in a highly secure, dark corporate vault.
+35 sec | A cyborg panther leaping onto the roof of a fast-moving bullet train in the pouring rain.
+45 sec | A young boy riding a junk-built hoverboard, outrunning a massive collapsing junk-metal mountain.
+50 sec | A heroic human soldier jumping onto an enemy drone, ripping out its wires in mid-air.
+40 sec | A sci-fi scavenger digging through a pile of robotic parts in the dark, finding a glowing power core.
+45 sec | A blind robotic seer walking calmly through a chaotic battlefield of exploding plasma energy.
+55 sec | A female rebel holding onto the edge of a flying drop-ship, struggling against aggressive wind.
+35 sec | A young cyberpunk kid spraying bright neon paint to blind a pursuing security robot.
+45 sec | A brave android pushing a heavy broken spaceship door open to let trapped humans escape.
+50 sec | A futuristic doctor running through a flooded, dark laboratory with a glowing vial of medicine.
+40 sec | A mechanical hawk flying desperately through a violent electromagnetic hurricane in the sky.
+45 sec | A young hacker typing furiously on a wrist-computer while the glass floor cracks beneath her.
+35 sec | A brave human soldier running across a battlefield of giant walking mechs in the thick fog.
+50 sec | A cyborg ninja sliding gracefully under a barrage of falling concrete blocks in a ruined city.
+40 sec | A young boy in an oxygen mask running through a toxic yellow gas cloud in an underground bunker.
+45 sec | A robotic rescue dog pulling an unconscious girl from a crashed, burning hover-car.
+55 sec | A female sci-fi captain commanding her sinking spaceship, gripping the steering wheel tightly.
+35 sec | A cyber-punk street artist parkouring off neon walls to escape a gang of shadowy enforcers.
+45 sec | A young rebel using a glowing energy shield to block a massive falling metal beam.
+50 sec | A robotic samurai standing alone in a rainy alley, drawing a glowing katana sword.
+40 sec | A brave human scavenger swimming through a flooded reactor core to flip a critical switch.
+45 sec | A young female pilot ejecting from her exploding star-fighter into the dark, cold vacuum of space.
+35 sec | A cyber-enhanced detective walking through a rainy neon crime scene, scanning the ground.
+50 sec | A rogue android looking at its own robotic hands in the rain, crying human tears.
+40 sec | A young boy wearing AR goggles, navigating a deadly maze of invisible digital traps.
+45 sec | A brave space colonist running across a cracked moon crater as a massive meteor approaches.
+55 sec | A female mechanic fighting a giant rogue industrial robot using only a heavy magnetic wrench.
+35 sec | A cyborg street rat tossing a smoke grenade to blind pursuing heavy corporate guards.
+45 sec | A young hacker sprinting down a dark spiral staircase while the building's gravity system fails.
+50 sec | A robotic guardian shielding a human family from a massive blast of wind and debris.
+40 sec | A female sci-fi warrior driving a neon motorcycle through a collapsing underground tunnel.
+45 sec | A brave human jumping across spinning massive turbine blades in a futuristic power plant.
+35 sec | A cyber-monk meditating calmly while the neon city around him violently crumbles.
+50 sec | A young runner diving through a closing portal just as the digital world violently deletes itself.
+40 sec | A robotic stray dog barking aggressively at a massive approaching cleaning-drone.
+45 sec | A female rebel throwing a glowing EMP grenade to disable a dark robotic checkpoint.
+55 sec | A lone cyberpunk warrior standing on a skyscraper edge, looking at the massive incoming digital storm.
