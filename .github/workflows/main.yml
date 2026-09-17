@@ -1,0 +1,193 @@
+name: Advanced Cinematic AI Pipeline
+
+on:
+  schedule:
+    - cron: '30 00 * * *'  # Roz Subah 5:00 Baje (IST) chalega
+    - cron: '30 12 * * *'  # Roz Shaam 8:00 Baje (IST) chalega
+  workflow_dispatch:       # Aap jab chaho manual button dabakar bhi chala sakte ho
+
+permissions:
+  contents: write
+
+jobs:
+  # ==========================================
+  # STAGE 1: AI SCRIPT GENERATION (OPENROUTER)
+  # ==========================================
+  stage1-prompts:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        
+    - name: Generate AI Prompts
+      run: |
+        pip install openai      
+        python auto_prompt.py
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        
+    - name: Commit updated story.txt
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add story.txt metadata.txt prompts.txt music_prompt.txt
+        git commit -m "Auto-updated script files" || echo "No changes to commit"
+        git push
+        
+    - uses: actions/upload-artifact@v4
+      with:
+        name: text-prompts
+        path: |
+          prompts.txt
+          metadata.txt
+          music_prompt.txt
+          
+    - id: set-matrix
+      run: |
+        count=$(grep -c '^' prompts.txt || echo 0)
+        if [ "$count" -eq 0 ]; then exit 1; fi
+        matrix_json=$(python3 -c "import json; print(json.dumps(list(range(1, $count + 1))))")
+        echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+
+  # ==========================================
+  # STAGE 2: IMAGE GENERATION (MAX 5 PARALLEL)
+  # ==========================================
+  stage2-images:
+    needs: stage1-prompts
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        machine_id: ${{ fromJson(needs.stage1-prompts.outputs.matrix) }}
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        
+    - name: Install Playwright & Requests
+      run: |
+        pip install requests playwright
+        playwright install chromium
+        playwright install-deps chromium
+        
+    - uses: actions/download-artifact@v4
+      with:
+        name: text-prompts
+        
+    - name: Generate Image (Bing AI)
+      env:
+        BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        CHAT_ID: ${{ secrets.CHAT_ID }}
+      run: python generate_image.py ${{ matrix.machine_id }}
+      
+    - uses: actions/upload-artifact@v4
+      with:
+        name: image_machine_${{ matrix.machine_id }}
+        path: scene_images/
+
+  # ==========================================
+  # STAGE 3: VIDEO GENERATION (MAX 2 PARALLEL)
+  # ==========================================
+  stage3-videos:
+    needs: [stage1-prompts, stage2-images]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        machine_id: ${{ fromJson(needs.stage1-prompts.outputs.matrix) }}
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        
+    - name: Install Playwright
+      run: |
+        pip install requests playwright
+        playwright install chromium
+        playwright install-deps chromium
+        
+    - uses: actions/download-artifact@v4
+      with:
+        name: text-prompts
+        
+    - uses: actions/download-artifact@v4
+      with:
+        name: image_machine_${{ matrix.machine_id }}
+        path: scene_images/
+        
+    - name: Generate Video (Upsampler AI)
+      env:
+        BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        CHAT_ID: ${{ secrets.CHAT_ID }}
+      run: python generate_video.py ${{ matrix.machine_id }}
+      
+    - uses: actions/upload-artifact@v4
+      with:
+        name: video_machine_${{ matrix.machine_id }}
+        path: generated_videos/
+
+  # ==========================================
+  # STAGE 4: ADD OUTRO, MERGE & UPLOAD
+  # ==========================================
+  stage4-post-process:
+    needs: stage3-videos
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update && sudo apt-get install -y ffmpeg zip
+        pip install google-api-python-client google-auth-httplib2 google-auth-oauthlib requests transformers torch scipy
+        
+    - uses: actions/download-artifact@v4
+      with:
+        name: text-prompts
+        
+    - uses: actions/download-artifact@v4
+      with:
+        path: generated_videos/
+        pattern: video_machine_*
+        merge-multiple: true
+
+    - name: Download Random Outro from GDrive
+      env:
+        GDRIVE_JSON: ${{ secrets.GDRIVE_JSON }}
+        GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+      run: python download_outro.py
+
+    - name: Generate Local AI Background Music
+      run: python generate_music.py
+        
+    - name: Apply Smooth Fades & Merge with Outro
+      run: python process_videos.py
+      
+    # 👇 YAHAN ZIP WALA LOGIC UPDATE KIYA HAI TAAKI MUSIC BHI MILE 👇
+    - name: Create Downloadable ZIP (Backup)
+      run: |
+        if [ -f "bgm.wav" ]; then
+          zip -r Final_Video_Package.zip final_output/Final_4K_Monetizable_Short.mp4 metadata.txt bgm.wav
+        else
+          zip -r Final_Video_Package.zip final_output/Final_4K_Monetizable_Short.mp4 metadata.txt
+        fi
+      
+    - uses: actions/upload-artifact@v4
+      with:
+        name: Ready_To_Download_Video
+        path: Final_Video_Package.zip
+        
+    - name: Auto Upload to YouTube
+      env:
+        YOUTUBE_TOKEN_BASE64: ${{ secrets.YOUTUBE_TOKEN_BASE64 }}
+      run: python upload_youtube.py
