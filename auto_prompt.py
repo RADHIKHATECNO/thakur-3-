@@ -10,176 +10,120 @@ from openai import OpenAI
 STORY_FILE = "story.txt"
 PROMPT_FILE = "prompts.txt"
 METADATA_FILE = "metadata.txt"
+DIALOGUE_FILE = "dialogue.txt"
 
 API_KEY = os.getenv("OPENROUTER_API_KEY")
-if not API_KEY:
-    print("❌ ERROR: OPENROUTER_API_KEY is missing!")
-    sys.exit(1)
-
 client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=API_KEY)
 
 def get_live_free_models():
-    # Yeh function best free models ki list nikalega
-    models_list = []
-    try:
-        req = urllib.request.Request("https://openrouter.ai/api/v1/models")
-        with urllib.request.urlopen(req) as response:
-            data = json.loads(response.read().decode('utf-8'))
-        models_list = [m["id"] for m in data.get("data", []) if m.get("pricing", {}).get("prompt") == "0" and m.get("pricing", {}).get("completion") == "0"]
-    except:
-        pass
-        
-    # Guaranteed Fallback Models (Agar API se list na mile)
     fallbacks = [
         "google/gemini-2.0-flash-lite-preview-02-05:free", 
         "meta-llama/llama-3.3-70b-instruct:free",
-        "cognitivecomputations/dolphin3.0-r1-mistral-24b:free",
-        "meta-llama/llama-3.2-3b-instruct:free"
+        "cognitivecomputations/dolphin3.0-r1-mistral-24b:free"
     ]
-    
-    # Dono lists ko combine kar dete hain
-    for fb in fallbacks:
-        if fb not in models_list:
-            models_list.append(fb)
-            
-    return models_list
+    return fallbacks
 
 def generate_ai_script(duration_sec, topic):
-    target_scenes = max(2, math.ceil(int(duration_sec) / 5))
-    system_prompt = "You are a Master Visual Storyteller. You strictly follow instructions. Output ONLY the raw prompt lines. NO tables, NO intro, NO outro."
+    target_scenes = max(3, math.ceil(int(duration_sec) / 5)) # Kam se kam 3 scene
+    system_prompt = "You are a Master Visual Storyteller. Follow instructions STRICTLY. NO intros. ONLY output the requested format."
     
-    user_prompt = f"""Task: Create a COMPLETE, highly engaging, and 100% YOUTUBE-SAFE visual story based on: "{topic}".
-    Total Duration: {duration_sec} seconds. Generate EXACTLY {target_scenes} scenes.
+    # 🔴 YAHAN MAGIC HAI: Loop, Hook aur Dialogue ka logic
+    user_prompt = f"""Task: Create a highly viral, engaging YouTube Short visual script about: "{topic}".
+    Total Scenes: EXACTLY {target_scenes}.
 
-    🚨 5-SECOND HOOK (CRITICAL):
-    - The VERY FIRST SCENE must be visually shocking, mysterious, highly emotional, or fast-action to instantly GRAB the viewer's attention. Make them stop scrolling!
+    🚨 VIRAL RULES:
+    1. 5-SECOND HOOK: Scene 1 must be visually shocking to stop scrolling.
+    2. THE PERFECT LOOP: The EXACT visual description of Scene 1 MUST be repeated perfectly as the LAST SCENE. This creates a seamless loop!
+    3. DIALOGUE (IMPORTANT): Scene 1 needs a short, suspenseful Voiceover Dialogue (in Hinglish or English). All other scenes must have "NONE" for dialogue.
 
-    🚨 DYNAMIC MOOD & GENRE:
-    - Match the lighting, facial expressions, and foley audio exactly to the mood of the topic (e.g., Sad=gloomy/crying, Action=intense/fast, Romantic=sunset/warm, Horror=dark/nervous).
+    FORMAT EACH LINE EXACTLY LIKE THIS:
+    Visual Image Prompt | Motion Prompt | Dialogue Text
+    
+    EXAMPLE:
+    A boy looking terrified at the sky | fast zoom in | Wait, you won't believe what happened next...
+    A massive spaceship appearing | slow motion pan | NONE
+    A boy looking terrified at the sky | fast zoom in | NONE
 
-    🚨 YOUTUBE RULES: NO blood, NO weapons, NO gore. Family-Friendly only.
-    🚨 STORY ARC: Scene 1 is the HOOK. Middle is action/struggle. Last Scene is a clear ENDING/RESOLUTION.
-    🚨 BACKGROUND CONSISTENCY: Invent ONE specific character and ONE specific background. Keep them the SAME in every prompt.
-    🚨 AUDIO RULES: ONLY Foley sounds. End every video prompt with "NO BGM, NO VOICE."
-
-    FORMAT EXACTLY LIKE THIS EXAMPLE (Use the `|` symbol):
-    A fluffy white wolf pup named Leo in a snowy mountain looking shocked | Loud wind howling, sudden snow crunching. NO BGM, NO VOICE.
-    A fluffy white wolf pup named Leo in a snowy mountain slipping on ice | Rapid sliding sounds, panicked scratching. NO BGM, NO VOICE.
-
-    START YOUR RESPONSE DIRECTLY WITH THE FIRST SCENE:"""
+    START DIRECTLY WITH SCENE 1:"""
     
     models = get_live_free_models()
-    attempt = 1
-    max_attempts = 10 # Script jab tak nahi banegi, 10 baar tak alag-alag model try karega!
-
     for model_name in models:
-        for _ in range(2): # Ek model ko 2 baar mauka dega
-            if attempt > max_attempts:
-                print("❌ ERROR: 10 attempts ho gaye par kisi AI ne sahi format nahi diya. Exiting.")
-                return None
-                
-            print(f"🔄 Attempt {attempt}/{max_attempts} - Trying model: {model_name}...")
+        for _ in range(2):
             try:
                 response = client.chat.completions.create(
                     model=model_name,
                     messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
-                    temperature=0.8
+                    temperature=0.7
                 )
                 text = response.choices[0].message.content
+                valid_lines = [line.strip() for line in text.split('\n') if '|' in line and not line.startswith('---')]
                 
-                if text:
-                    print("\n--- RAW AI OUTPUT ---")
-                    print(text)
-                    print("---------------------\n")
-                    
-                    valid_lines = []
-                    for line in text.split('\n'):
-                        line = line.strip()
-                        line = re.sub(r'^[\d\.\-\*\s]+', '', line) # Galti se aaye numbers hidayega
-                        if '|' in line and '---|' not in line and not line.startswith('|'):
-                            valid_lines.append(line)
-                            
-                    if len(valid_lines) > 0:
-                        print(f"✅ Success! Hamein {len(valid_lines)} valid scenes mil gaye from {model_name}.")
-                        return "\n".join(valid_lines[:target_scenes])
-                    else:
-                        print(f"⚠️ AI ne script di, par format galat tha (No `|` found). Retrying...")
-            except Exception as e:
-                print(f"⚠️ Model {model_name} failed/crashed: {e}. Switching model...")
+                if len(valid_lines) >= 2:
+                    # 🔴 Pehle scene ka dialogue alag save karna
+                    parts = valid_lines[0].split('|')
+                    if len(parts) >= 3:
+                        dialogue = parts[2].strip()
+                        if dialogue.upper() != "NONE":
+                            with open(DIALOGUE_FILE, "w", encoding="utf-8") as f:
+                                f.write(dialogue)
+                                
+                    return "\n".join(valid_lines[:target_scenes])
+            except:
                 time.sleep(2)
-                
-            attempt += 1
-
     return None
 
 def generate_ai_metadata(topic):
-    system_prompt = "You are a highly creative Music Director and YouTube SEO Expert."
+    system_prompt = "You are a Gen-Z viral YouTube SEO Expert."
+    # 🔴 YAHAN GEN-Z CLICKBAIT SEO LOGIC HAI
     user_prompt = f"""Story Topic: '{topic}'.
-    Create Advertiser-Friendly YouTube Shorts metadata and a Custom Music Prompt.
+    Create highly viral, clickbaity YouTube Shorts metadata. No robotic language. Use emojis.
+    Title should be curious like "Wait for the end 🤯" or "Bro really did that 💀".
+    
     Format EXACTLY like this:
-    TITLE: [Title]
-    DESC: [Description]
-    TAGS: [tag1, tag2, tag3]
-    MUSIC: [Unique 5-8 word music prompt]"""
+    TITLE: [Viral Title]
+    DESC: [Short engaging description asking a question to get comments]
+    TAGS: [shorts, viral, trending, fyp, + 3 topic tags]
+    MUSIC: [Unique 5-8 word music prompt like 'dark sigma phonk drift']"""
     
     models = get_live_free_models()
     music_prompt = "dark emotional cinematic background score" 
     
-    # Metadata ke liye bhi loop taaki error na aaye
-    for model_name in models[:3]: # First 3 models ko try karega
+    for model_name in models:
         try:
-            print(f"🎵 Generating Metadata using {model_name}...")
             response = client.chat.completions.create(
                 model=model_name,
                 messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
                 temperature=0.8
             )
             text = response.choices[0].message.content
-            
             title = re.search(r"TITLE:\s*(.*)", text).group(1).strip()
             desc = re.search(r"DESC:\s*([\s\S]*?)TAGS:", text).group(1).strip()
             tags = re.search(r"TAGS:\s*(.*)", text).group(1).strip()
             music_prompt = re.search(r"MUSIC:\s*(.*)", text).group(1).strip()
             
             with open("music_prompt.txt", "w", encoding="utf-8") as f: f.write(music_prompt)
-            print("✅ Metadata successfully generated!")
             return title, desc, tags
         except:
-            time.sleep(1)
+            pass
             
-    # Agar kisi bhi API se metadata na bane toh yeh default de dega (Fail nahi hoga)
     with open("music_prompt.txt", "w", encoding="utf-8") as f: f.write(music_prompt)
-    return "Amazing Viral Story 🔥", "Watch this amazing story till the end!", "shorts, trending, story, viral"
+    return "Wait for the end 🤯", "What would you do in this situation? Let me know in the comments!", "shorts, viral, trending"
 
 def process_stories():
-    if not os.path.exists(STORY_FILE):
-        print(f"❌ ERROR: {STORY_FILE} file not found!")
-        sys.exit(1)
-        
+    if not os.path.exists(STORY_FILE): sys.exit(1)
     with open(STORY_FILE, "r", encoding="utf-8") as f: content = f.read().strip()
-    
-    if not content:
-        print(f"❌ ERROR: {STORY_FILE} is empty!")
-        sys.exit(1)
+    if not content: sys.exit(1)
         
     topics = [t.strip() for t in content.split("\n") if t.strip()]
     parts = topics[0].split("|")
     duration_sec, topic = (int(re.search(r'\d+', parts[0]).group()), parts[1].strip()) if len(parts) > 1 else (30, topics[0])
     
-    print(f"📝 Topic: {topic}, Duration: {duration_sec}s")
-    
     ai_output = generate_ai_script(duration_sec, topic)
-    
-    if not ai_output:
-        print("❌ CRITICAL ERROR: 10 attempts ke baad bhi AI fail ho gaya. Process stopped.")
-        sys.exit(1)
-        
     with open(PROMPT_FILE, "w", encoding="utf-8") as f: f.write(ai_output + "\n")
     
     title, desc, tags = generate_ai_metadata(topic)
     with open(METADATA_FILE, "w", encoding="utf-8") as f: f.write(f"TITLE: {title}\nDESC: {desc}\nTAGS: {tags}")
     with open(STORY_FILE, "w", encoding="utf-8") as f: f.write("\n".join(topics[1:]) + "\n" if len(topics) > 1 else "")
-    print("🚀 All processes completed successfully!")
 
 if __name__ == "__main__":
     process_stories()
