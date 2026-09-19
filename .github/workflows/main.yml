@@ -10,9 +10,6 @@ permissions:
   contents: write
 
 jobs:
-  # ==========================================
-  # STAGE 1: AI SCRIPT GENERATION
-  # ==========================================
   stage1-prompts:
     runs-on: ubuntu-latest
     steps:
@@ -21,7 +18,7 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: Generate AI Prompts
+    - name: Generate AI Story Script
       run: |
         pip install openai
         python auto_prompt.py
@@ -33,7 +30,7 @@ jobs:
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
         git add story.txt metadata.txt prompts.txt music_prompt.txt
-        git commit -m "Auto-updated script files" || echo "No changes"
+        git commit -m "Auto-updated story files" || echo "No changes"
         git push
 
     - uses: actions/upload-artifact@v4
@@ -53,9 +50,6 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
 
-  # ==========================================
-  # STAGE 2: TEXT-TO-VIDEO GENERATION (MAX 2 PARALLEL)
-  # ==========================================
   stage2-videos:
     needs: stage1-prompts
     runs-on: ubuntu-latest
@@ -91,9 +85,6 @@ jobs:
         name: video_machine_${{ matrix.machine_id }}
         path: generated_videos/
 
-  # ==========================================
-  # STAGE 3: MERGE, ADD OUTRO & UPLOAD
-  # ==========================================
   stage3-post-process:
     needs: stage2-videos
     runs-on: ubuntu-latest
@@ -127,21 +118,21 @@ jobs:
     - name: Generate AI Music
       run: python generate_music.py
 
-    - name: Merge Videos + Outro + Music
+    - name: Seamless Merge + Crossfade + BGM
       run: python process_videos.py
 
     - name: Create ZIP Backup
       run: |
         if [ -f "bgm.wav" ]; then
-          zip -r Final_Video_Package.zip final_output/Final_4K_Monetizable_Short.mp4 metadata.txt bgm.wav
+          zip -r Final_Long_Video_Package.zip final_output/Final_4K_Monetizable_Long_Video.mp4 metadata.txt bgm.wav
         else
-          zip -r Final_Video_Package.zip final_output/Final_4K_Monetizable_Short.mp4 metadata.txt
+          zip -r Final_Long_Video_Package.zip final_output/Final_4K_Monetizable_Long_Video.mp4 metadata.txt
         fi
 
     - uses: actions/upload-artifact@v4
       with:
-        name: Ready_To_Download_Video
-        path: Final_Video_Package.zip
+        name: Ready_Long_Video
+        path: Final_Long_Video_Package.zip
 
     - name: Auto Upload to YouTube
       env:
