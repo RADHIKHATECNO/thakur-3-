@@ -6,9 +6,9 @@ import googleapiclient.discovery
 from google.oauth2.credentials import Credentials
 from googleapiclient.http import MediaFileUpload
 
-VIDEO_FILE = "final_output/Final_4K_Monetizable_Short.mp4"
+VIDEO_FILE = "final_output/Final_4K_Monetizable_Long_Video.mp4"
 META_FILE = "metadata.txt"
-CATEGORY_ID = "24" # Entertainment
+CATEGORY_ID = "24"  # Entertainment
 
 def create_token_from_secret():
     token_b64 = os.getenv("YOUTUBE_TOKEN_BASE64")
@@ -17,14 +17,16 @@ def create_token_from_secret():
             token_json_str = base64.b64decode(token_b64).decode("utf-8")
             with open('token.json', 'w') as f:
                 f.write(token_json_str)
-            print("✅ token.json file generated successfully!")
+            print("✅ token.json created!")
         except Exception as e:
-            print(f"❌ Failed to decode token: {e}")
+            print(f"❌ Token decode error: {e}")
+    else:
+        print("⚠️ YOUTUBE_TOKEN_BASE64 missing!")
 
 def parse_metadata():
-    title = "Wait for it 🤯"
+    title = "Heart Touching Story 😭"
     description = ""
-    tags = "shorts, viral, trending"
+    tags = "story, emotional, viral"
     
     if os.path.exists(META_FILE):
         with open(META_FILE, "r", encoding="utf-8") as f:
@@ -40,44 +42,60 @@ def parse_metadata():
 
 def upload_video():
     if not os.path.exists(VIDEO_FILE):
-        print("❌ Video file not found!")
+        print(f"❌ Video not found: {VIDEO_FILE}")
         return
-        
+
     create_token_from_secret()
-    title, description, tags_string = parse_metadata()
-    tags = [tag.strip() for tag in tags_string.split(",")][:8]
-    
-    # 🔴 AI डिस्क्लेमर हटा दिया गया है ताकि YouTube इसे नॉर्मल वीडियो माने
-    final_description = description
 
-    print(f"📌 UPLOADING: {title}")
+    title, description, tags_string = parse_metadata()
+    tags = [tag.strip() for tag in tags_string.split(",")][:15]  # Max 15 for long videos
+
+    ai_disclaimer = "यह एक original story है जिसे हमारी team ने AI tools (visuals/voice) और creative editing से बनाया है।\n\n"
+    final_description = ai_disclaimer + description
+
+    print(f"📤 UPLOADING LONG VIDEO: {title}")
+
     if not os.path.exists('token.json'):
+        print("❌ token.json missing!")
         return
 
-    creds = Credentials.from_authorized_user_file('token.json', ['https://www.googleapis.com/auth/youtube.upload'])
+    creds = Credentials.from_authorized_user_file(
+        'token.json',
+        ['https://www.googleapis.com/auth/youtube.upload']
+    )
     youtube = googleapiclient.discovery.build("youtube", "v3", credentials=creds)
 
     request_body = {
         "snippet": {
             "categoryId": CATEGORY_ID,
-            "title": title[:60],
+            "title": title[:100],  # Long videos can have longer titles
             "description": final_description[:5000],
             "tags": tags
         },
         "status": {
-            "privacyStatus": "private", # 🔴 YAHAN PUBLIC KO PRIVATE KAR DIYA HAI
+            "privacyStatus": "public",
             "selfDeclaredMadeForKids": False
         }
     }
 
-    media_file = MediaFileUpload(VIDEO_FILE, chunksize=-1, resumable=True, mimetype="video/mp4")
-    request = youtube.videos().insert(part="snippet,status", body=request_body, media_body=media_file)
+    media_file = MediaFileUpload(
+        VIDEO_FILE,
+        chunksize=-1,
+        resumable=True,
+        mimetype="video/mp4"
+    )
     
+    request = youtube.videos().insert(
+        part="snippet,status",
+        body=request_body,
+        media_body=media_file
+    )
+
     try:
         response = request.execute()
-        print(f"✅ VIDEO UPLOADED AS PRIVATE! Link: https://youtu.be/{response['id']}")
+        print(f"✅ VIDEO UPLOADED! https://youtu.be/{response['id']}")
     except Exception as e:
-        print(f"❌ Upload Failed: {e}")
+        print(f"❌ Upload failed: {e}")
 
 if __name__ == "__main__":
     upload_video()
