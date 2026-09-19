@@ -42,66 +42,110 @@ def get_live_free_models():
     return models_list
 
 
-def generate_ai_script(duration_sec, topic):
+def generate_ai_script(duration_sec, topic, story_type, mood):
     target_scenes = max(2, math.ceil(int(duration_sec) / 5))
+    
+    # 🔴 Mood-based lighting/tone guidance
+    mood_map = {
+        "sad": "gloomy lighting, tears, slow emotional movements, melancholic atmosphere",
+        "happy": "bright sunny lighting, smiling faces, cheerful energy, vibrant colors",
+        "horror": "dark shadowy lighting, nervous expressions, eerie atmosphere, suspenseful tension",
+        "interesting": "dynamic lighting, curious expressions, fast-paced engaging action",
+        "romantic": "warm golden hour lighting, loving gazes, soft intimate atmosphere",
+        "motivational": "inspiring bright lighting, determined expressions, uplifting energy",
+        "thriller": "dramatic high-contrast lighting, intense expressions, edge-of-seat tension"
+    }
+    mood_desc = mood_map.get(mood.lower(), "cinematic dramatic lighting, expressive emotions")
 
-    system_prompt = """You are a Master AI Video Prompt Engineer specializing in DIALOGUE-DRIVEN 
-DIRECT Text-to-Video generation for tools like Veo, Kling, Sora, Runway, Upsampler (these tools 
-take ONE SINGLE FULL TEXT PROMPT and directly generate a 5-second video clip). 
-You strictly follow instructions. Output ONLY the raw scene prompts. 
-NO tables, NO intro, NO outro, NO explanations, NO markdown formatting."""
+    # 🔴 Character type guidance
+    char_map = {
+        "anime": "Japanese anime-style animated characters with large expressive eyes, colorful hair, detailed anime art style",
+        "human": "realistic photorealistic human characters with natural skin texture, real human proportions",
+        "cartoon": "Western cartoon-style animated characters with exaggerated features, bold outlines",
+        "realistic": "ultra-realistic human characters, lifelike details, natural lighting",
+        "sci-fi": "futuristic sci-fi characters with cybernetic enhancements, neon accents, high-tech clothing"
+    }
+    char_desc = char_map.get(story_type.lower(), "cinematic realistic characters")
 
-    user_prompt = f"""Task: Create a COMPLETE, highly engaging, DIALOGUE-BASED video story for: "{topic}".
-Total Duration: {duration_sec} seconds. Generate EXACTLY {target_scenes} scenes.
-Each scene = ONE complete, ready-to-use, single-paragraph prompt for a 5-SECOND AI video clip.
+    system_prompt = """You are a Master Storytelling Director specializing in creating COMPLETE, 
+EMOTIONALLY ENGAGING, DIALOGUE-DRIVEN video stories for Direct Text-to-Video AI tools (Veo, Kling, 
+Sora, Runway, Upsampler). You create stories with proper BEGINNING → MIDDLE → END structure like 
+a real movie/series episode. You strictly follow instructions. Output ONLY raw scene prompts. 
+NO tables, NO numbering, NO intro/outro text."""
 
-🚨 CRITICAL RULE - EVERYTHING IN ONE FLOWING PARAGRAPH (NO SYMBOLS):
-- Each scene prompt must be written as ONE natural, flowing, detailed paragraph that includes:
-  1) Full character physical description (repeated every time for consistency)
-  2) Full background/location description (repeated every time)
-  3) Camera angle and camera movement for this shot
-  4) The action happening in the scene
-  5) The spoken dialogue (who says what, in quotes)
-  6) The sound effects
-  7) Background music status (on/off and mood)
+    user_prompt = f"""Create a COMPLETE {mood.upper()} story with {story_type.upper()} characters based on: "{topic}".
 
-🚨 CHARACTER CONSISTENCY:
-- Invent SPECIFIC characters with FULL fixed description: name, face, hair, skin tone, exact clothing/colors.
-- REPEAT the COMPLETE character description in EVERY scene (video AI has no memory).
+📊 SPECIFICATIONS:
+- Total Duration: {duration_sec} seconds ({target_scenes} scenes × 5 seconds each)
+- Character Style: {char_desc}
+- Mood/Tone: {mood_desc}
 
-🚨 BACKGROUND CONSISTENCY:
-- Invent ONE specific detailed location.
-- REPEAT this FULL background in every scene.
+🎬 STORY STRUCTURE (CRITICAL):
+- Scenes 1-2 (First 10 seconds): POWERFUL HOOK - Start with the most dramatic/emotional/shocking 
+  moment that immediately grabs attention. Make viewers NEED to watch till the end.
+- Scenes 3 to {target_scenes-3}: RISING ACTION - Build the story with connected narrative flow. 
+  Each scene must naturally lead to the next. Show conflict, struggle, tension building.
+- Last 2-3 scenes: CLIMAX + RESOLUTION - The big emotional payoff. Clear ending with closure or 
+  powerful message that satisfies the viewer.
 
-🚨 CAMERA (Mandatory, varies each scene):
-- Describe camera instruction: "close-up zoom", "wide drone shot", "tracking shot", "low-angle", "slow-motion", etc.
-- VARY the camera angle every scene for cinematic feel.
+🚨 DIALOGUE RULES (CRITICAL):
+- EVERY scene MUST have ONE dialogue line spoken by a named character.
+- Dialogue length: 20-30 WORDS (10-12 seconds when spoken naturally) - DOUBLE the previous limit!
+- Dialogue must be EMOTIONAL, NATURAL, and ADVANCE THE STORY forward.
+- Use {mood} mood-appropriate language (sad=emotional/crying tone, happy=excited/cheerful, etc.)
+- Language: Natural Hindi/Hinglish mix (use English words where natural, Hindi for emotions)
 
-🚨 DIALOGUE (Mandatory in every scene):
-- ONE short dialogue line per scene by a NAMED character (max 10-14 words for 5 seconds).
-- Use natural Hindi/Hinglish/English matching the story mood.
+🎭 CHARACTER CONSISTENCY (CRITICAL):
+- Invent 1-3 SPECIFIC main characters with FULL detailed description:
+  * Character Type: {char_desc}
+  * Name, age, gender
+  * Face: eye color, facial features, expression style
+  * Hair: color, style, length
+  * Clothing: exact colors, style, accessories
+  * Unique trait: scar/glasses/necklace/tattoo (for AI to remember)
+- REPEAT THE EXACT SAME FULL CHARACTER DESCRIPTION word-for-word in EVERY scene 
+  (the video AI has ZERO memory between scenes - if you change even one word, the character face will change!)
 
-🚨 AUDIO (Mandatory):
-- Mention sound effects clearly.
-- Mention if background music plays or not (and its mood if yes).
+🌍 BACKGROUND CONSISTENCY (CRITICAL):
+- Invent ONE main location/setting with FULL details:
+  * Type of place, architecture style
+  * Colors, lighting, weather, time of day
+  * Key landmarks/objects visible in background
+- REPEAT THE EXACT SAME FULL BACKGROUND DESCRIPTION in every scene (only camera angle changes)
 
-🚨 STORY ARC:
-- Scene 1 = Strong HOOK (striking visual + punchy dialogue).
-- Middle = Rising action with dialogue.
-- Last = Clear RESOLUTION with meaningful closing dialogue.
+📹 CAMERA WORK (CRITICAL - Must vary each scene):
+- Scene 1-2 (Hook): Use dramatic camera angles (low-angle hero shot, extreme close-up on shocked face, etc.)
+- Every scene must specify ONE camera instruction:
+  "close-up slow zoom into face", "wide establishing shot", "tracking shot following character", 
+  "over-the-shoulder shot", "low-angle dramatic shot", "high-angle bird's eye view", 
+  "slow-motion shot", "handheld shaky cam", "smooth dolly shot", "pan left to reveal", etc.
+- VARY camera angle every scene for cinematic professional feel
 
-🚨 YOUTUBE SAFE: NO blood, NO weapons, NO gore. Family-Friendly only.
+🔊 AUDIO CLARITY (CRITICAL):
+- After dialogue, clearly specify:
+  * SFX: Specific sound effects matching the action (footsteps, door slam, wind, crying, etc.)
+  * BGM: Either "No background music, dialogue focus" OR "Soft [mood] background music, low volume"
+- Use "No BGM" for heavy dialogue scenes, light BGM only for action/transition scenes
 
-🚨 OUTPUT FORMAT:
-- Write each scene as ONE single continuous paragraph.
-- After EACH scene, add a line with ONLY: ###
-- Do NOT number scenes. Just paragraph, then ###, then next paragraph.
+🎨 MOOD INTEGRATION:
+- {mood.upper()} mood must reflect in:
+  * Lighting: {mood_desc}
+  * Character expressions and body language
+  * Dialogue tone and word choice
+  * Sound effects selection
 
-EXAMPLE:
-Meera, a young Indian girl with a tight black ponytail, sharp eyes, light brown skin, wearing an orange racing jacket with tiger-stripe patches, sits inside her orange Tiger-liveried race car with tiger stripe decals, parked on a dusty golden-brown countryside race track with rocky mountains and a wooden bridge in the background under bright afternoon sun, the camera slowly zooms into a close-up of her determined face as she grips the steering wheel, Meera says with fierce confidence, "मेरी टाइगर कार स्पीड के लिए रेडी है!", the loud sound of her engine revving can be heard, there is no background music, only clear dialogue and engine sound.
+📝 OUTPUT FORMAT (VERY IMPORTANT):
+- Write each scene as ONE single flowing detailed paragraph (like a movie script scene description)
+- Include everything in natural descriptive sentences: character details, background, camera, action, 
+  dialogue (in quotes with character name), sound effects, music status
+- After each scene paragraph, add a line with ONLY: ###
+- NO scene numbers, NO titles, just paragraph → ### → next paragraph
+
+EXAMPLE (for anime sad story):
+Akira, a 17-year-old Japanese anime boy with spiky silver hair, bright blue eyes filled with tears, wearing a black high school uniform with a red scarf, standing alone on an empty rainy rooftop of a tall grey concrete school building under dark stormy clouds at sunset, the camera does a slow close-up zoom into his devastated crying face as rain pours down, Akira says with a breaking voice while crying, "Tumne kaha tha ki tum hamesha mere saath rahoge, phir kyun chale gaye? Main akela kaise jee paunga is duniya mein bina tumhare? Mere best friend, please wapas aa jao!", the sound of heavy rain hitting the rooftop and distant thunder rumbling can be heard, no background music, only dialogue and rain sound effects.
 ###
 
-START YOUR RESPONSE DIRECTLY WITH THE FIRST SCENE:"""
+NOW CREATE THE FULL {target_scenes}-SCENE STORY. START DIRECTLY WITH SCENE 1:"""
 
     models = get_live_free_models()
     attempt = 1
@@ -110,39 +154,49 @@ START YOUR RESPONSE DIRECTLY WITH THE FIRST SCENE:"""
     for model_name in models:
         for _ in range(2):
             if attempt > max_attempts:
-                print("❌ ERROR: 10 attempts ho gaye par kisi AI ne sahi format nahi diya. Exiting.")
+                print("❌ ERROR: 10 attempts failed. Exiting.")
                 return None
 
-            print(f"🔄 Attempt {attempt}/{max_attempts} - Trying model: {model_name}...")
+            print(f"🔄 Attempt {attempt}/{max_attempts} - Model: {model_name}...")
             try:
                 response = client.chat.completions.create(
                     model=model_name,
-                    messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
-                    temperature=0.8
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    temperature=0.85,
+                    max_tokens=8000  # Increased for longer stories
                 )
                 text = response.choices[0].message.content
 
                 if text:
-                    print("\n--- RAW AI OUTPUT ---")
-                    print(text)
-                    print("---------------------\n")
+                    print("\n--- RAW AI OUTPUT (First 500 chars) ---")
+                    print(text[:500] + "...")
+                    print("----------------------------------------\n")
 
                     raw_scenes = text.split("###")
                     valid_scenes = []
+                    
                     for scene in raw_scenes:
                         scene = scene.strip()
+                        # Remove accidental numbering/titles
                         scene = re.sub(r'^[\d\.\-\*\s]+', '', scene)
                         scene = re.sub(r'^(Scene\s*\d+\s*[:\-]?\s*)', '', scene, flags=re.IGNORECASE)
-                        if len(scene) > 30:
+                        # Must be substantial paragraph
+                        if len(scene) > 50:
                             valid_scenes.append(scene)
 
-                    if len(valid_scenes) > 0:
+                    if len(valid_scenes) >= 2:  # At least hook scenes
                         print(f"✅ Success! {len(valid_scenes)} valid scenes from {model_name}.")
-                        return "\n\n".join(valid_scenes[:target_scenes])
+                        # Take exact number needed
+                        final_scenes = valid_scenes[:target_scenes]
+                        return "\n\n".join(final_scenes)
                     else:
-                        print(f"⚠️ AI ne script di, par format galat tha. Retrying...")
+                        print(f"⚠️ Only {len(valid_scenes)} scenes found. Retrying...")
+                        
             except Exception as e:
-                print(f"⚠️ Model {model_name} failed: {e}. Switching...")
+                print(f"⚠️ Model {model_name} error: {e}")
                 time.sleep(2)
 
             attempt += 1
@@ -150,21 +204,31 @@ START YOUR RESPONSE DIRECTLY WITH THE FIRST SCENE:"""
     return None
 
 
-def generate_ai_metadata(topic):
-    system_prompt = """You are a Top-Tier YouTube Shorts Growth Hacker & Viral Content Strategist.
-You have analyzed THOUSANDS of viral Shorts (10M+ views). You know proven patterns, hook-words, 
-curiosity-gaps, emoji placement, hashtag strategy for Algorithm."""
+def generate_ai_metadata(topic, mood, duration_sec):
+    system_prompt = """You are a YouTube Algorithm Expert who has studied millions of viral long-form 
+YouTube videos (NOT Shorts). You know exactly what titles, descriptions, tags make videos rank high 
+in search and recommendations for 3-15 minute story/entertainment videos."""
 
     user_prompt = f"""Topic: "{topic}"
+Mood: {mood}
+Duration: {int(duration_sec/60)} minutes
 
-Create VIRAL YouTube Shorts metadata using proven patterns from top viral videos.
+Create VIRAL YouTube metadata for a LONG-FORM video (NOT a Short) using proven patterns.
 
 RULES:
-- TITLE: Max 70 chars. Include curiosity hook/emotional trigger/power word. Add 1-2 emojis.
-- DESC: 2-3 lines. First line hooks curiosity. Include call-to-action. End with 4-6 hashtags 
-  (mix broad like #shorts #viral #fyp + niche related to topic).
-- TAGS: 12-15 comma separated. Mix broad viral tags + niche genre tags + topic-specific keywords.
-- MUSIC: 5-8 word mood description matching story emotion.
+- TITLE: Max 70 chars. Emotional hook + curiosity gap. Add 1-2 emojis. 
+  (e.g., "This Will Make You Cry 😭", "The Most Shocking Story Ever Told 😱", 
+  "You Won't Believe How This Ends 🔥")
+- DESC: 3-5 lines. First line = strong hook. Include story teaser. Add call-to-action 
+  ("Subscribe for more stories"). End with 5-8 hashtags mixing:
+  * Broad: #story #emotional #viral #trending #youtube
+  * Mood-specific: #sadstory #horrortale #inspirational (based on {mood})
+  * Topic-specific keywords from the story
+- TAGS: 15-20 comma-separated tags for long videos:
+  * Broad viral: viral video, trending story, emotional video, must watch
+  * Genre: {mood} story, {mood} video, storytelling, narrative
+  * Topic-specific keywords
+- MUSIC: 5-8 word mood description matching {mood} emotion
 
 FORMAT:
 TITLE: [title]
@@ -173,14 +237,17 @@ TAGS: [tag1, tag2, ...]
 MUSIC: [music prompt]"""
 
     models = get_live_free_models()
-    music_prompt = "dark emotional cinematic background score"
+    music_prompt = f"{mood} emotional cinematic background score"
 
     for model_name in models[:3]:
         try:
             print(f"🎵 Generating Metadata using {model_name}...")
             response = client.chat.completions.create(
                 model=model_name,
-                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
                 temperature=0.9
             )
             text = response.choices[0].message.content
@@ -191,7 +258,7 @@ MUSIC: [music prompt]"""
             music_match = re.search(r"MUSIC:\s*(.*)", text)
 
             if not (title_match and desc_match and tags_match):
-                print(f"⚠️ {model_name} ne format sahi nahi diya...")
+                print(f"⚠️ {model_name} format error...")
                 continue
 
             title = title_match.group(1).strip()
@@ -205,18 +272,20 @@ MUSIC: [music prompt]"""
 
             print("✅ Metadata generated!")
             print(f"📌 TITLE: {title}")
-            print(f"📌 DESC: {desc}")
-            print(f"📌 TAGS: {tags}")
+            print(f"📌 TAGS: {tags[:100]}...")
             return title, desc, tags
+            
         except Exception as e:
-            print(f"⚠️ Model failed: {e}")
+            print(f"⚠️ {model_name} failed: {e}")
             time.sleep(1)
 
+    # Fallback
     with open("music_prompt.txt", "w", encoding="utf-8") as f:
         f.write(music_prompt)
-    fallback_title = f"You Won't Believe What Happens 😱 | {topic[:40]}"
-    fallback_desc = f"This {topic} story will shock you 💔 Watch till end!\n#shorts #viral #fyp #trending"
-    fallback_tags = f"shorts, viral shorts, trending, fyp, {topic.lower()}"
+    
+    fallback_title = f"This {mood.title()} Story Will Touch Your Heart 😭💔"
+    fallback_desc = f"Watch this incredible {mood} story till the end. You won't regret it! 🎬\n\n#story #{mood}story #viral #emotional #trending #storytelling #youtube"
+    fallback_tags = f"story, {mood} story, emotional story, viral video, trending, storytelling, {topic}, youtube stories"
     return fallback_title, fallback_desc, fallback_tags
 
 
@@ -233,28 +302,59 @@ def process_stories():
         sys.exit(1)
 
     topics = [t.strip() for t in content.split("\n") if t.strip()]
+    
+    # Parse first story line: [type] | [duration] | [mood] | [topic]
     parts = topics[0].split("|")
-    duration_sec, topic = (int(re.search(r'\d+', parts[0]).group()), parts[1].strip()) if len(parts) > 1 else (30, topics[0])
+    
+    if len(parts) >= 4:
+        story_type = parts[0].strip()
+        duration_str = parts[1].strip()
+        mood = parts[2].strip()
+        topic = parts[3].strip()
+        
+        # Parse duration (support "5 min", "300 sec", "3 minutes", etc.)
+        duration_match = re.search(r'(\d+)\s*(min|sec|minute|second)', duration_str, re.IGNORECASE)
+        if duration_match:
+            num = int(duration_match.group(1))
+            unit = duration_match.group(2).lower()
+            if 'min' in unit:
+                duration_sec = num * 60
+            else:
+                duration_sec = num
+        else:
+            duration_sec = 180  # Default 3 min
+            
+    else:
+        # Old format fallback
+        duration_sec = 180
+        topic = topics[0]
+        story_type = "human"
+        mood = "interesting"
 
-    print(f"📝 Topic: {topic}, Duration: {duration_sec}s")
+    print(f"📝 Story Type: {story_type}")
+    print(f"⏱️  Duration: {duration_sec} seconds ({duration_sec/60:.1f} minutes)")
+    print(f"🎭 Mood: {mood}")
+    print(f"📖 Topic: {topic}")
 
-    ai_output = generate_ai_script(duration_sec, topic)
+    ai_output = generate_ai_script(duration_sec, topic, story_type, mood)
 
     if not ai_output:
-        print("❌ CRITICAL ERROR: AI failed after 10 attempts.")
+        print("❌ CRITICAL: AI failed after 10 attempts.")
         sys.exit(1)
 
     with open(PROMPT_FILE, "w", encoding="utf-8") as f:
         f.write(ai_output + "\n")
 
-    title, desc, tags = generate_ai_metadata(topic)
+    title, desc, tags = generate_ai_metadata(topic, mood, duration_sec)
+    
     with open(METADATA_FILE, "w", encoding="utf-8") as f:
         f.write(f"TITLE: {title}\nDESC: {desc}\nTAGS: {tags}")
-    
+
+    # Remove first story from queue
     with open(STORY_FILE, "w", encoding="utf-8") as f:
         f.write("\n".join(topics[1:]) + "\n" if len(topics) > 1 else "")
-    
-    print("🚀 All processes completed successfully!")
+
+    print("🚀 Script generation completed successfully!")
 
 
 if __name__ == "__main__":
