@@ -1,4 +1,4 @@
-anime | 5 min | sad | A boy loses his best friend in a war
+anime | 1 min | sad | A boy loses his best friend in a war
 human | 10 min | horror | A girl trapped in a haunted mansion
 cartoon | 3 min | happy | A puppy finds his way back home
 anime | 7 min | interesting | A hacker trying to stop AI takeover
