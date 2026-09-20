@@ -1,2 +1,1 @@
-cartoon | 3 min | happy | A puppy finds his way back home
-anime | 7 min | interesting | A hacker trying to stop AI takeover
+SHORT | 30 | इंसानों जैसी बोलती हुई कार की फनी स्टोरी
