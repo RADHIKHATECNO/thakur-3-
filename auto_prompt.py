@@ -20,12 +20,36 @@ if not API_KEY:
 client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=API_KEY)
 
 def get_live_free_models():
+    """Bhai ka Original Logic: Jo live check karega ki konsa model abhi FREE hai"""
+    models_list = []
+    try:
+        req = urllib.request.Request("https://openrouter.ai/api/v1/models")
+        with urllib.request.urlopen(req) as response:
+            data = json.loads(response.read().decode('utf-8'))
+        # Live free models filter
+        models_list = [
+            m["id"] for m in data.get("data", []) 
+            if m.get("pricing", {}).get("prompt") == "0" 
+            and m.get("pricing", {}).get("completion") == "0"
+        ]
+        print(f"🌐 Found {len(models_list)} Live Free Models from OpenRouter API.")
+    except Exception as e:
+        print(f"⚠️ Failed to fetch live models from API: {e}")
+        
+    # Guaranteed Fallbacks (Agar API fail ho jaye)
     fallbacks = [
-        "google/gemini-2.0-flash-lite-preview-02-05:free", 
-        "meta-llama/llama-3.3-70b-instruct:free",
-        "cognitivecomputations/dolphin3.0-r1-mistral-24b:free"
+        "google/gemini-2.0-flash-exp:free",
+        "google/gemini-2.0-pro-exp-02-05:free",
+        "sophosympatheia/rogue-rose-103b-v0.2:free",
+        "qwen/qwen-vl-plus:free",
+        "mistralai/mistral-7b-instruct:free"
     ]
-    return fallbacks
+    
+    for fb in fallbacks:
+        if fb not in models_list:
+            models_list.append(fb)
+            
+    return models_list
 
 def setup_files():
     if not os.path.exists(CHARACTER_FILE):
@@ -37,11 +61,11 @@ def setup_files():
             f.write("3 min | 3D Pixar Animation | Ek lalachii kauwa aur jadui paani\n")
             
 def generate_ai_script(duration_str, style, topic, character_rules):
-    # Calculate scenes: Assume 1 scene (image) every 3.5 seconds on average
     try:
         minutes = int(re.search(r'\d+', duration_str).group())
     except:
         minutes = 1
+    # Assuming 1 scene every 3.5 seconds
     target_scenes = max(5, math.ceil((minutes * 60) / 3.5))
 
     system_prompt = "You are an Elite YouTube Scriptwriter and Master Storyboard Artist. You MUST follow instructions strictly."
@@ -58,37 +82,49 @@ def generate_ai_script(duration_str, style, topic, character_rules):
     
     🚨 SCRIPT RULES:
     1. HOOK: The first 1-2 lines must be extremely suspenseful or shocking.
-    2. MICRO-SYNC: Break the story into tiny sentences. 1 Voiceover Line = 1 Detailed Image. Every small action (like dropping a glass, smiling) gets its own line.
+    2. MICRO-SYNC: Break the story into tiny sentences. 1 Voiceover Line = 1 Detailed Image. Every small action gets its own line.
     
     FORMAT YOUR RESPONSE EXACTLY LIKE THIS (Use `|` as separator):
     [Hindi/Hinglish Voiceover Line] | [Highly Detailed Image Prompt following the Character Bible and Style]
     
     EXAMPLE:
     Ek samay ki baat hai, ek bhayanak jangal mein ek akela aadmi chal raha tha. | A wide shot of a lone man with a red scarf walking through a dark, foggy, terrifying forest. {style}.
-    Achanak usne apne samne ek vishal bhalu dekha. | Close up of the same man with a red scarf looking absolutely terrified as a massive black bear stands in front of him. {style}.
     
     START DIRECTLY WITH LINE 1. NO INTRO. NO OUTRO. EXACTLY {target_scenes} LINES."""
     
     models = get_live_free_models()
+    max_attempts = 15 # Will try up to 15 different models/attempts
+    attempt = 1
+    
     for model_name in models:
-        try:
-            print(f"🔄 Generating Story & Prompts using {model_name}...")
-            response = client.chat.completions.create(
-                model=model_name,
-                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
-                temperature=0.8
-            )
-            text = response.choices[0].message.content
+        for _ in range(2): # Try each model 2 times
+            if attempt > max_attempts:
+                print("❌ ERROR: Tried too many times. All AI models failed.")
+                sys.exit(1)
+                
+            try:
+                print(f"🔄 Attempt {attempt}: Generating Story with {model_name}...")
+                response = client.chat.completions.create(
+                    model=model_name,
+                    messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
+                    temperature=0.8
+                )
+                text = response.choices[0].message.content
+                
+                valid_lines = [line.strip() for line in text.split('\n') if '|' in line and not line.startswith('|')]
+                if len(valid_lines) >= 5:
+                    print(f"✅ Success! Generated {len(valid_lines)} micro-scenes/prompts from {model_name}.")
+                    return "\n".join(valid_lines)
+                else:
+                    print(f"⚠️ Model {model_name} gave bad format. Retrying...")
+            except Exception as e:
+                error_msg = str(e)
+                print(f"⚠️ {model_name} failed: {error_msg[:100]}...")
+                time.sleep(2)
+                
+            attempt += 1
             
-            valid_lines = [line.strip() for line in text.split('\n') if '|' in line and not line.startswith('|')]
-            if len(valid_lines) >= 5:
-                print(f"✅ Success! Generated {len(valid_lines)} micro-scenes/prompts.")
-                return "\n".join(valid_lines)
-        except Exception as e:
-            print(f"⚠️ {model_name} failed: {e}. Retrying...")
-            time.sleep(2)
-            
-    print("❌ Failed to generate script.")
+    print("❌ Failed to generate script after all attempts.")
     sys.exit(1)
 
 def generate_ai_metadata(topic):
@@ -98,11 +134,12 @@ def generate_ai_metadata(topic):
     TITLE: [Clickbaity Viral Title in English/Hindi (Max 70 chars)]
     DESC: [A highly engaging description. Tease the story but don't reveal the ending.]
     TAGS: [comma separated top 10 SEO tags]
-    MUSIC: [10-word prompt for AI background music, e.g., 'epic sad cinematic emotional orchestral Hans Zimmer style']"""
+    MUSIC: [10-word prompt for AI background music, e.g., 'epic sad cinematic emotional']"""
     
-    for model_name in get_live_free_models():
+    models = get_live_free_models()
+    for model_name in models[:5]: # Try first 5 models for metadata
         try:
-            print(f"🎵 Generating Viral SEO Metadata using {model_name}...")
+            print(f"🎵 Generating Metadata using {model_name}...")
             response = client.chat.completions.create(
                 model=model_name,
                 messages=[{"role": "system", "content": "You are a YouTube SEO Expert."}, {"role": "user", "content": prompt}],
@@ -118,7 +155,7 @@ def generate_ai_metadata(topic):
             with open("music_prompt.txt", "w", encoding="utf-8") as f: f.write(music)
             return title, desc, tags
         except:
-            pass
+            time.sleep(1)
             
     with open("music_prompt.txt", "w", encoding="utf-8") as f: f.write("epic emotional cinematic storytelling background score")
     return "Amazing Story You Must Watch 🔥", "Watch this amazing story till the end!", "story, viral, trending"
@@ -136,7 +173,6 @@ def main():
         print("❌ No topics found in story.txt!")
         sys.exit(1)
         
-    # Parsing new story format: "6 min | 3D Pixar | Lalachi kauwa"
     parts = [p.strip() for p in stories[0].split("|")]
     if len(parts) >= 3:
         duration_str, style, topic = parts[0], parts[1], parts[2]
@@ -153,11 +189,10 @@ def main():
     with open(METADATA_FILE, "w", encoding="utf-8") as f:
         f.write(f"TITLE: {title}\nDESC: {desc}\nTAGS: {tags}")
         
-    # Remove top line from story.txt
     with open(STORY_FILE, "w", encoding="utf-8") as f:
         f.write("\n".join(stories[1:]) + "\n" if len(stories) > 1 else "")
         
-    print("🚀 Auto Prompt Stage Completed!")
+    print("🚀 Auto Prompt Stage Completed Successfully!")
 
 if __name__ == "__main__":
     main()
