@@ -11,13 +11,12 @@ CHARACTER_FILE = "character.txt"
 PROMPT_FILE = "prompts.txt"
 METADATA_FILE = "metadata.txt"
 
-# KIE API Key from GitHub Secrets
+# KIE API Key
 API_KEY = os.getenv("KIE_API_KEY")
 if not API_KEY:
     print("❌ ERROR: KIE_API_KEY is missing in GitHub Secrets!")
     sys.exit(1)
 
-# ✅ Naya KIE Codex Endpoint jo aapne cURL me diya tha
 API_URL = "https://api.kie.ai/codex/v1/responses"
 MODEL_NAME = "gpt-6-astra"
 
@@ -31,15 +30,15 @@ def setup_files():
             f.write("4 min | 3D Pixar Animation | Ek lalachi kauwa aur jadui paani ki kahani\n")
             
 def call_kie_api(system_prompt, user_prompt):
+    # User-Agent add kiya hai taaki Cloudflare/Security block na kare
     headers = {
         "Authorization": f"Bearer {API_KEY}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
     
-    # System aur User prompt ko jod dete hain taaki Astra ko puri command ek saath mile
     full_prompt = f"{system_prompt}\n\n{user_prompt}"
     
-    # ✅ Exact wahi format jo aapne bheja tha
     data = {
         "model": MODEL_NAME,
         "input": [
@@ -54,29 +53,41 @@ def call_kie_api(system_prompt, user_prompt):
             }
         ],
         "reasoning": {
-            "effort": "low" # Credits bachane ke liye low rakha hai, kaam perfect karega
+            "effort": "low"
         }
     }
     
-    response = requests.post(API_URL, headers=headers, json=data)
-    
-    if response.status_code == 200:
-        res_json = response.json()
+    try:
+        response = requests.post(API_URL, headers=headers, json=data, timeout=120)
+        
+        # Safe JSON parsing
         try:
-            # ✅ Parsing based on the exact JSON response you provided
-            outputs = res_json.get('output', [])
-            for item in outputs:
-                if item.get('type') == 'message':
-                    contents = item.get('content', [])
-                    for content_item in contents:
-                        if content_item.get('type') == 'output_text':
-                            return content_item.get('text')
+            res_json = response.json()
+        except Exception:
+            print(f"⚠️ API did not return JSON. Status Code: {response.status_code}")
+            print(f"⚠️ RAW RESPONSE (First 500 chars): {response.text[:500]}")
             return None
-        except Exception as e:
-            print(f"⚠️ JSON Parse Error: {e}. Raw Response: {response.text}")
+            
+        if response.status_code == 200:
+            try:
+                outputs = res_json.get('output', [])
+                for item in outputs:
+                    if item.get('type') == 'message':
+                        contents = item.get('content', [])
+                        for content_item in contents:
+                            if content_item.get('type') == 'output_text':
+                                return content_item.get('text')
+                print(f"⚠️ Structure mismatch. KIE returned: {res_json}")
+                return None
+            except Exception as e:
+                print(f"⚠️ Data extraction error: {e}")
+                return None
+        else:
+            print(f"⚠️ KIE API Error ({response.status_code}): {res_json}")
             return None
-    else:
-        print(f"⚠️ KIE API Error ({response.status_code}): {response.text}")
+            
+    except Exception as e:
+        print(f"⚠️ Network Request Failed: {e}")
         return None
 
 def generate_ai_script(duration_str, style, topic, character_rules):
@@ -84,8 +95,7 @@ def generate_ai_script(duration_str, style, topic, character_rules):
         minutes = int(re.search(r'\d+', duration_str).group())
     except:
         minutes = 1
-    
-    # 1 scene every 3.5 seconds
+        
     target_scenes = max(5, math.ceil((minutes * 60) / 3.5))
 
     system_prompt = "You are an Elite YouTube Scriptwriter and Master Storyboard Artist. You MUST follow instructions strictly."
@@ -119,10 +129,10 @@ def generate_ai_script(duration_str, style, topic, character_rules):
         if text:
             valid_lines = [line.strip() for line in text.split('\n') if '|' in line and not line.startswith('|')]
             if len(valid_lines) >= 5:
-                print(f"✅ Success! Generated {len(valid_lines)} micro-scenes/prompts from {MODEL_NAME}.")
+                print(f"✅ Success! Generated {len(valid_lines)} micro-scenes/prompts.")
                 return "\n".join(valid_lines)
             else:
-                print(f"⚠️ Bad Formatting. AI Output: {text[:100]}... Retrying!")
+                print(f"⚠️ AI did not follow format. Snippet: {text[:100]}... Retrying!")
         time.sleep(3)
             
     print("❌ Failed to generate script after 3 attempts.")
@@ -149,8 +159,8 @@ def generate_ai_metadata(topic):
             
             with open("music_prompt.txt", "w", encoding="utf-8") as f: f.write(music)
             return title, desc, tags
-        except Exception as e:
-            print(f"⚠️ Failed to parse metadata text: {e}")
+        except Exception:
+            pass
             
     with open("music_prompt.txt", "w", encoding="utf-8") as f: f.write("epic emotional cinematic storytelling background score")
     return "Amazing Story You Must Watch 🔥", "Watch this amazing story till the end!", "story, viral, trending"
