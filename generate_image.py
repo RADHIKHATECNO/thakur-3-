@@ -25,9 +25,10 @@ def load_config():
         with open(CONFIG_FILE, "r") as f:
             return json.load(f)
     return {
-        "video_type": "short",
+        "video_type"  : "short",
         "aspect_ratio": "9:16",
-        "character": ""
+        "character"   : "",
+        "visual_style": "Pixar 3D funny cartoon style"
     }
 
 # ============================================================
@@ -37,18 +38,70 @@ def send_telegram_photo(photo_path, caption=""):
     if not BOT_TOKEN or not CHAT_ID:
         return
     try:
-        with open(photo_path, "rb") as file:
+        with open(photo_path, "rb") as f:
             requests.post(
                 f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto",
                 data={"chat_id": CHAT_ID, "caption": caption},
-                files={"photo": file},
+                files={"photo": f},
                 timeout=15
             )
     except:
         pass
 
 # ============================================================
-# LIVE SCREENSHOT TRACKER
+# PROMPT EXTRACTOR
+# ============================================================
+def get_image_prompt(machine_id, config):
+    """
+    prompts.txt se IMAGE prompt nikalo (Part 2)
+    Format: NARRATION >> IMAGE_PROMPT >> VIDEO_PROMPT
+    """
+    if not os.path.exists(PROMPT_FILE):
+        return None
+
+    character    = config.get("character", "")
+    char_parts   = character.split("|")
+    char_looks   = char_parts[1].strip() if len(char_parts) > 1 else ""
+    visual_style = config.get("visual_style", "Pixar 3D funny cartoon style")
+    aspect_ratio = config.get("aspect_ratio", "9:16")
+
+    if aspect_ratio == "9:16":
+        aspect = "vertical 9:16 composition, mobile format"
+    else:
+        aspect = "horizontal 16:9 widescreen"
+
+    with open(PROMPT_FILE, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    if machine_id <= len(lines):
+        line = lines[machine_id - 1].strip()
+
+        if ">>" in line:
+            parts = line.split(">>")
+            if len(parts) >= 2:
+                img_prompt = parts[1].strip()
+
+                # Enhanced prompt banao
+                enhanced = (
+                    f"{img_prompt}, "
+                    f"character appearance: {char_looks}, "
+                    f"style: {visual_style}, "
+                    f"{aspect}, "
+                    f"bright vivid colors, "
+                    f"expressive face, "
+                    f"high quality, "
+                    f"no text, no watermark"
+                )
+                return enhanced
+
+    # Fallback
+    return (
+        f"funny cartoon character in colorful scene, "
+        f"{visual_style}, high quality"
+    )
+
+# ============================================================
+# LIVE TRACKER
 # ============================================================
 async def live_screenshot_tracker(page, machine_id, stop_event):
     sec = 10
@@ -57,66 +110,29 @@ async def live_screenshot_tracker(page, machine_id, stop_event):
         if stop_event.is_set():
             break
         try:
-            shot_path = os.path.join(SAVE_FOLDER, f"live_img_m{machine_id}.png")
-            await page.screenshot(path=shot_path)
+            shot = os.path.join(SAVE_FOLDER, f"live_{machine_id}.png")
+            await page.screenshot(path=shot)
             send_telegram_photo(
-                shot_path,
-                f"👀 [Image M-{machine_id}] Live: {sec}s..."
+                shot,
+                f"👀 [Image {machine_id}] {sec}s..."
             )
             sec += 10
         except:
             pass
 
 # ============================================================
-# PROMPT BUILDER
-# ============================================================
-def build_image_prompt(raw_prompt, character, aspect_ratio, config):
-    """
-    Visual prompt ko cinematic + character consistent banao
-    """
-    # Character details add karo
-    char_desc = character if character else ""
-
-    # Aspect ratio ke hisaab se style
-    if aspect_ratio == "9:16":
-        composition = "vertical composition, mobile screen format, 9:16 ratio"
-    else:
-        composition = "horizontal composition, widescreen format, 16:9 ratio"
-
-    # Clean prompt
-    clean = re.sub(r'--ar\s+\d+:\d+', '', raw_prompt).strip()
-
-    # Final enhanced prompt
-    enhanced = (
-        f"{clean}. "
-        f"Main character: {char_desc}. "
-        f"Style: bright colorful animation, funny cartoon style, "
-        f"expressive faces, vibrant colors, happy mood, "
-        f"high quality, {composition}, "
-        f"cinematic lighting, no text, no watermark"
-    )
-
-    return enhanced
-
-# ============================================================
 # IMAGE GENERATOR
 # ============================================================
-async def generate_single_image(machine_id, prompt_text, character, aspect_ratio):
-    out_img_path = os.path.join(SAVE_FOLDER, f"scene_{machine_id}.jpg")
-
-    # Enhanced prompt banao
-    enhanced_prompt = build_image_prompt(
-        prompt_text, character, aspect_ratio, {}
-    )
+async def generate_single_image(machine_id, image_prompt):
+    out_path    = os.path.join(SAVE_FOLDER, f"scene_{machine_id}.jpg")
+    max_retries = 5
 
     print(f"\n🎨 Scene {machine_id} Image Prompt:")
-    print(f"   {enhanced_prompt[:100]}...")
-
-    max_retries = 5
+    print(f"   {image_prompt[:100]}...")
 
     async with async_playwright() as p:
         for attempt in range(1, max_retries + 1):
-            print(f"\n🔄 [Attempt {attempt}/{max_retries}] Scene {machine_id}...")
+            print(f"\n🔄 Attempt {attempt}/{max_retries}...")
 
             browser = await p.chromium.launch(headless=True)
             context = await browser.new_context(
@@ -136,20 +152,21 @@ async def generate_single_image(machine_id, prompt_text, character, aspect_ratio
                 )
                 await asyncio.sleep(3)
 
-                # Prompt fill karo
+                # Prompt fill
                 await page.locator(
                     "textarea, input[placeholder*='Describe']"
-                ).first.fill(enhanced_prompt)
+                ).first.fill(image_prompt)
                 await asyncio.sleep(1)
 
                 # Generate click
                 await page.locator(
-                    "button:has-text('Generate'), button:has-text('Create')"
+                    "button:has-text('Generate'), "
+                    "button:has-text('Create')"
                 ).first.click()
 
-                print("⏳ Bing generating image...")
+                print("⏳ Generating...")
 
-                # Loading hatne ka wait
+                # Loading wait
                 try:
                     await page.locator(
                         "text='We are generating'"
@@ -157,30 +174,30 @@ async def generate_single_image(machine_id, prompt_text, character, aspect_ratio
                 except:
                     pass
 
-                # Download button wait
-                download_btn = page.locator(
-                    "button[title='Download']:not([disabled]), a:has-text('Download')"
+                # Download button
+                dl_btn = page.locator(
+                    "button[title='Download']:not([disabled]), "
+                    "a:has-text('Download')"
                 ).first
-                await download_btn.wait_for(state="visible", timeout=60000)
+                await dl_btn.wait_for(state="visible", timeout=60000)
 
-                # Extra wait for full HD load
-                print("✅ Render done! Waiting 5s for full HD...")
+                print("✅ Done! Waiting 5s for full HD...")
                 await asyncio.sleep(5)
 
                 # Download
-                async with page.expect_download() as download_info:
-                    await download_btn.click()
+                async with page.expect_download() as dl_info:
+                    await dl_btn.click()
 
-                download = await download_info.value
-                await download.save_as(out_img_path)
+                download = await dl_info.value
+                await download.save_as(out_path)
 
                 stop_tracker.set()
                 send_telegram_photo(
-                    out_img_path,
-                    f"✅ [Scene {machine_id}] Image Ready! Attempt {attempt}"
+                    out_path,
+                    f"✅ Scene {machine_id} Image Ready! (Attempt {attempt})"
                 )
 
-                print(f"🎉 Scene {machine_id} image saved!")
+                print(f"🎉 Scene {machine_id} saved!")
                 await browser.close()
                 return True
 
@@ -190,8 +207,8 @@ async def generate_single_image(machine_id, prompt_text, character, aspect_ratio
                 await browser.close()
                 await asyncio.sleep(4)
 
-        print(f"❌ All {max_retries} attempts failed for Scene {machine_id}!")
-        return False
+    print(f"❌ All attempts failed for Scene {machine_id}!")
+    return False
 
 # ============================================================
 # MAIN
@@ -199,35 +216,16 @@ async def generate_single_image(machine_id, prompt_text, character, aspect_ratio
 async def main():
     machine_id = int(sys.argv[1]) if len(sys.argv) > 1 else 1
 
-    # Config load karo
-    config      = load_config()
-    character   = config.get("character", "")
-    aspect_ratio = config.get("aspect_ratio", "9:16")
+    config = load_config()
 
     print(f"\n{'='*50}")
     print(f"🎨 IMAGE GENERATOR - Scene {machine_id}")
-    print(f"   Character    : {character[:50]}...")
-    print(f"   Aspect Ratio : {aspect_ratio}")
+    print(f"   Style : {config.get('visual_style', 'Pixar')}")
+    print(f"   Ratio : {config.get('aspect_ratio', '9:16')}")
     print(f"{'='*50}\n")
 
-    # Prompts load karo
-    prompts = {}
-    if os.path.exists(PROMPT_FILE):
-        with open(PROMPT_FILE, "r", encoding="utf-8") as f:
-            for idx, line in enumerate(f.readlines(), 1):
-                parts = line.strip().split("|")
-                if parts:
-                    # Part 1 = visual prompt
-                    prompts[idx] = parts[0].strip()
-
-    prompt_text = prompts.get(
-        machine_id,
-        "A funny colorful cartoon character in a bright happy scene"
-    )
-
-    await generate_single_image(
-        machine_id, prompt_text, character, aspect_ratio
-    )
+    image_prompt = get_image_prompt(machine_id, config)
+    await generate_single_image(machine_id, image_prompt)
 
 if __name__ == "__main__":
     asyncio.run(main())
