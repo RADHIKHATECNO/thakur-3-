@@ -1,3 +1,4 @@
-SHORT | 35 | एक बोलती हुई कार जो ट्रैफिक में फँसकर मज़ेदार बातें करती है
-SHORT | 45 | एक छोटा कुत्ता जो अपने मालिक को रोज़ सुबह जगाने के नए तरीके अपनाता है
-SHORT | 30 | एक जादुई पेंसिल जो जो भी बनाए वो सच हो जाए और मज़ेदार गड़बड़ हो
+short | 30sec | Ek insaano jaisi bolti hui funny car ki story jo traffic mein phans jaati hai aur sabse ladhti hai - comedy
+short | 40sec | Ek super lazy robot ki funny story jo kaam karne ki jagah sone ke bahane dhundta rehta hai - comedy
+short | 35sec | Ek chhota sa funny alien jo pehli baar Earth pe aaya aur samosa khake pagal ho gaya - comedy
+long | 10min | Ek mehnat karne wale chhote se dukandaar ki funny aur inspiring story jo apni magic cycle se duniya badal deta hai - comedy inspirational
