@@ -9,10 +9,10 @@ from playwright.async_api import async_playwright
 # ============================================================
 # CONFIG
 # ============================================================
-BOT_TOKEN  = os.getenv("BOT_TOKEN", "")
-CHAT_ID    = os.getenv("CHAT_ID", "")
-IMAGE_DIR  = "scene_images"
-VIDEO_DIR  = "generated_videos"
+BOT_TOKEN   = os.getenv("BOT_TOKEN", "")
+CHAT_ID     = os.getenv("CHAT_ID", "")
+IMAGE_DIR   = "scene_images"
+VIDEO_DIR   = "generated_videos"
 CONFIG_FILE = "video_config.json"
 PROMPT_FILE = "prompts.txt"
 
@@ -26,10 +26,10 @@ def load_config():
         with open(CONFIG_FILE, "r") as f:
             return json.load(f)
     return {
-        "video_type": "short",
-        "duration_sec": 30,
-        "aspect_ratio": "9:16",
-        "character": ""
+        "video_type"   : "short",
+        "duration_sec" : 30,
+        "aspect_ratio" : "9:16",
+        "character"    : ""
     }
 
 # ============================================================
@@ -40,11 +40,11 @@ def send_telegram_photo(photo_path, caption=""):
         return
     try:
         if os.path.exists(photo_path):
-            with open(photo_path, "rb") as file:
+            with open(photo_path, "rb") as f:
                 requests.post(
                     f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto",
                     data={"chat_id": CHAT_ID, "caption": caption},
-                    files={"photo": file},
+                    files={"photo": f},
                     timeout=20
                 )
     except Exception as e:
@@ -55,11 +55,11 @@ def send_telegram_video(video_path, caption=""):
         return
     try:
         if os.path.exists(video_path):
-            with open(video_path, "rb") as file:
+            with open(video_path, "rb") as f:
                 requests.post(
                     f"https://api.telegram.org/bot{BOT_TOKEN}/sendVideo",
                     data={"chat_id": CHAT_ID, "caption": caption},
-                    files={"video": file},
+                    files={"video": f},
                     timeout=120
                 )
     except Exception as e:
@@ -75,120 +75,174 @@ async def live_screenshot_monitor(page, machine_id, stop_event):
         if stop_event.is_set():
             break
         try:
-            shot_path = os.path.join(VIDEO_DIR, f"live_video_m{machine_id}.png")
+            shot_path = os.path.join(
+                VIDEO_DIR,
+                f"live_video_m{machine_id}.png"
+            )
             await page.screenshot(path=shot_path, timeout=5000)
             send_telegram_photo(
                 shot_path,
-                f"🎬 [Machine {machine_id}] Video Status #{shot_count}"
+                f"🎬 [Machine {machine_id}] "
+                f"Video Status #{shot_count}"
             )
             shot_count += 1
-            print(f"📸 Live Screenshot #{shot_count-1} - Machine {machine_id}")
+            print(
+                f"📸 Screenshot #{shot_count-1} "
+                f"- Machine {machine_id}"
+            )
         except Exception as e:
             print(f"⚠️ Screenshot failed: {e}")
 
 # ============================================================
-# PROMPT READER
+# VIDEO PROMPT READER
 # ============================================================
 def read_video_prompts(config):
     """
-    prompts.txt se video motion prompts nikalo
-    Character consistency add karo
+    prompts.txt se VIDEO prompt nikalo
+    Format: NARRATION >> IMAGE_PROMPT >> VIDEO_PROMPT
     """
     if not os.path.exists(PROMPT_FILE):
+        print(f"❌ {PROMPT_FILE} not found!")
         return {}
 
-    character = config.get("character", "")
+    character  = config.get("character", "")
+    char_parts = character.split("|")
+    char_name  = char_parts[0].strip() if len(char_parts) > 0 else "character"
+    char_looks = char_parts[1].strip() if len(char_parts) > 1 else ""
     video_type = config.get("video_type", "short")
 
     with open(PROMPT_FILE, "r", encoding="utf-8") as f:
         lines = f.readlines()
 
     video_prompts = {}
-    for idx, line in enumerate(lines, start=1):
-        if "|" in line:
-            # Part 1 = visual, Part 2 = narration
-            visual = line.split("|")[0].strip()
-        else:
-            visual = line.strip()
 
-        # Motion prompt enhance karo
+    for idx, line in enumerate(lines, start=1):
+        line = line.strip()
+        if not line:
+            continue
+
+        vid_prompt = ""
+
+        if ">>" in line:
+            # NEW FORMAT: NARRATION >> IMAGE >> VIDEO
+            parts = line.split(">>")
+            if len(parts) >= 3:
+                vid_prompt = parts[2].strip()
+            elif len(parts) == 2:
+                vid_prompt = parts[1].strip()
+
+        elif "|" in line:
+            # Old format fallback
+            parts      = line.split("|")
+            vid_prompt = parts[1].strip() if len(parts) > 1 else line
+
+        else:
+            vid_prompt = line
+
+        # Motion style
         if video_type == "short":
-            motion_style = (
+            motion_add = (
                 "smooth cinematic camera movement, "
                 "funny expressive animation, "
                 "bright colorful scene, "
                 "energetic motion"
             )
         else:
-            motion_style = (
+            motion_add = (
                 "slow cinematic pan, "
                 "detailed environment, "
                 "smooth professional camera work, "
                 "storytelling motion"
             )
 
-        enhanced_prompt = (
-            f"{visual}. "
-            f"Character: {character}. "
-            f"{motion_style}. "
-            f"Foley sound effects only. "
-            f"NO BGM. NO VOICE."
+        # Final enhanced prompt
+        enhanced = (
+            f"{vid_prompt}. "
+            f"Character: {char_name} - {char_looks[:60]}. "
+            f"{motion_add}. "
+            f"Foley sound effects only. NO BGM. NO VOICE."
         )
 
-        video_prompts[idx] = enhanced_prompt
+        video_prompts[idx] = enhanced
+        print(f"🎬 Scene {idx} prompt: {vid_prompt[:70]}...")
 
+    print(f"\n✅ {len(video_prompts)} video prompts loaded!")
     return video_prompts
 
 # ============================================================
-# CLIP DURATION CALCULATOR
+# CLIP DURATION FROM TIMING MAP
 # ============================================================
 def get_clip_duration(machine_id):
     """
-    Timing map se is scene ki voice duration lo
-    Video utni hi lambi banegi jitni voice hai
+    timing_map.json se voice duration lo
+    Video utni hi lambi banegi
     """
-    timing_map_path = "timing_map.json"
-    default_duration = 5  # Default 5 seconds
+    timing_path     = "timing_map.json"
+    default_duration = 5.0
 
-    if not os.path.exists(timing_map_path):
+    if not os.path.exists(timing_path):
+        print(f"⚠️ timing_map.json not found! Using {default_duration}s")
         return default_duration
 
     try:
-        with open(timing_map_path, "r") as f:
+        with open(timing_path, "r") as f:
             timing_map = json.load(f)
 
         scene_key = str(machine_id)
         if scene_key in timing_map:
-            duration = timing_map[scene_key].get("duration_sec", default_duration)
-            # Minimum 3 sec, Maximum 15 sec per clip
-            duration = max(3.0, min(15.0, float(duration)))
-            print(f"⏱️  Scene {machine_id} duration: {duration}s (from voice)")
+            duration = float(
+                timing_map[scene_key].get(
+                    "duration_sec",
+                    default_duration
+                )
+            )
+            # Min 3s Max 15s
+            duration = max(3.0, min(15.0, duration))
+            print(f"⏱️  Scene {machine_id}: {duration}s (from voice)")
             return duration
+
     except Exception as e:
-        print(f"⚠️ Timing map read error: {e}")
+        print(f"⚠️ Timing map error: {e}")
 
     return default_duration
 
 # ============================================================
 # VIDEO GENERATOR - UPSAMPLER
 # ============================================================
-async def generate_video_upsampler(machine_id, img_path, motion_prompt, duration):
+async def generate_video_upsampler(
+    machine_id,
+    img_path,
+    motion_prompt,
+    duration
+):
     """
     Upsampler.com se image to video generate karo
     10 browser restarts tak try karega
     """
-    video_filename = os.path.join(VIDEO_DIR, f"video_{machine_id}.mp4")
+    video_filename = os.path.join(
+        VIDEO_DIR,
+        f"video_{machine_id}.mp4"
+    )
 
-    # Pehle se bana hai toh skip
-    if os.path.exists(video_filename) and os.path.getsize(video_filename) > 10000:
-        print(f"⏭️  Video {machine_id} already exists. Skipping.")
+    # Already bana hai?
+    if (os.path.exists(video_filename) and
+            os.path.getsize(video_filename) > 10000):
+        print(f"⏭️  Video {machine_id} already exists!")
         return True
+
+    print(f"\n{'='*50}")
+    print(f"🎬 Generating Video {machine_id}")
+    print(f"   Image  : {img_path}")
+    print(f"   Prompt : {motion_prompt[:80]}...")
+    print(f"   Length : {duration}s")
+    print(f"{'='*50}\n")
 
     async with async_playwright() as p:
         max_restarts = 10
 
         for attempt in range(1, max_restarts + 1):
-            print(f"\n🔄 [Attempt {attempt}/{max_restarts}] Scene {machine_id}...")
+            print(f"\n🔄 [Attempt {attempt}/{max_restarts}]"
+                  f" Scene {machine_id}...")
 
             browser = await p.chromium.launch(headless=True)
             context = await browser.new_context(
@@ -197,36 +251,44 @@ async def generate_video_upsampler(machine_id, img_path, motion_prompt, duration
             )
             page = await context.new_page()
 
+            # Live monitor start
             stop_tracker = asyncio.Event()
             asyncio.create_task(
-                live_screenshot_monitor(page, machine_id, stop_tracker)
+                live_screenshot_monitor(
+                    page, machine_id, stop_tracker
+                )
             )
 
             try:
-                # Site open karo
+                # Site open
                 await page.goto(
                     "https://upsampler.com/free-video-generator-no-signup",
                     wait_until="domcontentloaded",
                     timeout=60000
                 )
                 await asyncio.sleep(3)
+                print("✅ Site opened!")
 
                 # Cookie accept
                 try:
-                    accept_btn = page.get_by_role("button", name="Accept")
+                    accept_btn = page.get_by_role(
+                        "button", name="Accept"
+                    )
                     if await accept_btn.is_visible(timeout=3000):
                         await accept_btn.click()
-                        print("✅ Cookie accepted")
+                        print("✅ Cookie accepted!")
                 except:
                     pass
 
                 # Image upload
-                file_input = page.locator("input[type='file']").first
+                file_input = page.locator(
+                    "input[type='file']"
+                ).first
                 await file_input.set_input_files(img_path)
                 await asyncio.sleep(3)
-                print("✅ Image uploaded")
+                print("✅ Image uploaded!")
 
-                # Motion prompt fill karo
+                # Motion prompt fill
                 prompt_selectors = [
                     "input[placeholder*='prompt' i]",
                     "textarea[placeholder*='prompt' i]",
@@ -234,31 +296,42 @@ async def generate_video_upsampler(machine_id, img_path, motion_prompt, duration
                     "textarea[placeholder*='Describe' i]",
                     "textarea"
                 ]
+
+                prompt_filled = False
                 for sel in prompt_selectors:
-                    loc = page.locator(sel).first
                     try:
+                        loc = page.locator(sel).first
                         if await loc.is_visible(timeout=2000):
                             await loc.fill(motion_prompt)
-                            print("✅ Prompt filled")
+                            prompt_filled = True
+                            print(f"✅ Prompt filled!")
                             break
                     except:
                         continue
 
-                # Duration select karo (5 seconds best for shorts)
-                try:
-                    duration_text = page.get_by_text("3 seconds")
-                    if await duration_text.is_visible(timeout=3000):
-                        await duration_text.click()
-                        await asyncio.sleep(1)
-                        await page.get_by_text("5 seconds", exact=True).click()
-                        print("✅ 5 seconds duration selected")
-                except:
-                    pass
+                if not prompt_filled:
+                    print("⚠️ Could not fill prompt!")
 
-                # Generate button click
+                # Duration select (5 seconds)
+                try:
+                    dur_btn = page.get_by_text("3 seconds")
+                    if await dur_btn.is_visible(timeout=3000):
+                        await dur_btn.click()
+                        await asyncio.sleep(1)
+                        await page.get_by_text(
+                            "5 seconds", exact=True
+                        ).click()
+                        print("✅ 5 seconds selected!")
+                except:
+                    print("⚠️ Duration selector not found!")
+
+                # Generate click
                 generate_btn = page.get_by_role(
-                    "button", name="Generate Video", exact=True
+                    "button",
+                    name="Generate Video",
+                    exact=True
                 )
+
                 if not await generate_btn.is_visible(timeout=3000):
                     generate_btn = page.locator(
                         "button:has-text('Generate')"
@@ -267,26 +340,45 @@ async def generate_video_upsampler(machine_id, img_path, motion_prompt, duration
                 if await generate_btn.is_visible():
                     await generate_btn.click()
                     print("✅ Generation started!")
-
-                await asyncio.sleep(8)
-
-                # Error check
-                gpu_error   = page.get_by_text("free GPUs are in high demand", exact=False)
-                limit_error = page.get_by_text("used up today", exact=False)
-
-                if await limit_error.is_visible() or await gpu_error.is_visible():
-                    print(f"⚠️  Limit/GPU error! Restarting browser...")
+                else:
+                    print("❌ Generate button not found!")
                     stop_tracker.set()
                     await browser.close()
                     await asyncio.sleep(5)
                     continue
 
-                # Video ready hone ka wait (max 6 min)
-                print("⏳ Waiting for video (max 6 minutes)...")
-                see_result_btn = page.locator(
-                    "button:has-text('See result'), a:has-text('See result')"
+                await asyncio.sleep(8)
+
+                # Error check
+                gpu_error   = page.get_by_text(
+                    "free GPUs are in high demand",
+                    exact=False
+                )
+                limit_error = page.get_by_text(
+                    "used up today",
+                    exact=False
+                )
+
+                if (await limit_error.is_visible() or
+                        await gpu_error.is_visible()):
+                    print(
+                        f"⚠️ Limit/GPU error! "
+                        f"Restarting browser..."
+                    )
+                    stop_tracker.set()
+                    await browser.close()
+                    await asyncio.sleep(5)
+                    continue
+
+                # Video ready wait (max 6 min)
+                print("⏳ Waiting for video (max 6 min)...")
+
+                see_result = page.locator(
+                    "button:has-text('See result'), "
+                    "a:has-text('See result')"
                 ).first
-                video_element = page.locator(
+
+                video_elem = page.locator(
                     "video:not([src*='_static'])"
                 ).first
 
@@ -299,80 +391,126 @@ async def generate_video_upsampler(machine_id, img_path, motion_prompt, duration
                     # Error check during wait
                     if (await limit_error.is_visible() or
                             await gpu_error.is_visible()):
-                        print("⚠️  Error during wait! Restarting...")
+                        print("⚠️ Error during wait!")
                         break
 
-                    # See result button click
+                    # See result click
                     try:
-                        if await see_result_btn.is_visible():
-                            await see_result_btn.click()
+                        if await see_result.is_visible():
+                            await see_result.click()
                             await asyncio.sleep(2)
                     except:
                         pass
 
                     # Video ready check
-                    if (await video_element.count() > 0 and
-                            await video_element.is_visible()):
-                        video_ready = True
-                        break
+                    try:
+                        if (await video_elem.count() > 0 and
+                                await video_elem.is_visible()):
+                            video_ready = True
+                            print("✅ Video is ready!")
+                            break
+                    except:
+                        pass
+
+                    # Progress log
+                    elapsed = int(time.time() - start_time)
+                    print(f"   ⏳ Waiting... {elapsed}s elapsed")
 
                 if not video_ready:
-                    print(f"⚠️  Video not ready. Restarting browser...")
+                    print("⚠️ Video not ready! Restarting...")
                     stop_tracker.set()
                     await browser.close()
                     await asyncio.sleep(5)
                     continue
 
-                # ✅ Video ready - Download karo
+                # ✅ Video ready - Screenshot
                 stop_tracker.set()
                 await asyncio.sleep(2)
 
-                # Preview screenshot
                 preview_path = os.path.join(
-                    VIDEO_DIR, f"preview_m{machine_id}.png"
+                    VIDEO_DIR,
+                    f"preview_m{machine_id}.png"
                 )
                 await page.screenshot(path=preview_path)
                 send_telegram_photo(
                     preview_path,
-                    f"📸 Scene {machine_id} ready! Downloading..."
+                    f"📸 Scene {machine_id} Ready! Downloading..."
                 )
                 await asyncio.sleep(4)
 
-                # Download logic
-                video_src = await video_element.get_attribute("src")
+                # Download
+                video_src = await video_elem.get_attribute("src")
 
                 if video_src:
-                    download_btn = page.locator(
-                        "a:has-text('Download'), button:has-text('Download')"
-                    ).first
+                    # Method 1: Download button
+                    try:
+                        dl_btn = page.locator(
+                            "a:has-text('Download'), "
+                            "button:has-text('Download')"
+                        ).first
 
-                    if await download_btn.is_visible():
-                        async with page.expect_download() as dl_info:
-                            await download_btn.click()
-                        download = await dl_info.value
-                        await download.save_as(video_filename)
-                    else:
-                        # Direct download fallback
-                        video_data = requests.get(video_src, timeout=60).content
-                        with open(video_filename, "wb") as f:
-                            f.write(video_data)
+                        if await dl_btn.is_visible(timeout=5000):
+                            async with page.expect_download() as dl_info:
+                                await dl_btn.click()
+                            download = await dl_info.value
+                            await download.save_as(video_filename)
+                            print("✅ Downloaded via button!")
 
-                print(f"🎉 Scene {machine_id} video downloaded!")
-                send_telegram_video(
-                    video_filename,
-                    f"🎬 Scene {machine_id} Final Video Ready!"
-                )
+                        else:
+                            raise Exception("Download button not visible")
 
-                await browser.close()
-                return True
+                    except:
+                        # Method 2: Direct URL download
+                        print("⚠️ Button failed! Trying direct download...")
+                        try:
+                            video_data = requests.get(
+                                video_src,
+                                timeout=60
+                            ).content
+                            with open(video_filename, "wb") as f:
+                                f.write(video_data)
+                            print("✅ Downloaded via direct URL!")
+                        except Exception as e:
+                            print(f"❌ Direct download failed: {e}")
+                            stop_tracker.set()
+                            await browser.close()
+                            await asyncio.sleep(5)
+                            continue
+
+                else:
+                    print("❌ No video source found!")
+                    stop_tracker.set()
+                    await browser.close()
+                    await asyncio.sleep(5)
+                    continue
+
+                # Verify download
+                if (os.path.exists(video_filename) and
+                        os.path.getsize(video_filename) > 10000):
+                    size_mb = os.path.getsize(video_filename) / (1024*1024)
+                    print(f"🎉 Scene {machine_id} downloaded! ({size_mb:.1f}MB)")
+                    send_telegram_video(
+                        video_filename,
+                        f"🎬 Scene {machine_id} Video Ready! ({size_mb:.1f}MB)"
+                    )
+                    await browser.close()
+                    return True
+                else:
+                    print("❌ Download file too small!")
+                    await browser.close()
+                    await asyncio.sleep(5)
+                    continue
 
             except Exception as e:
-                print(f"⚠️  Crash on attempt {attempt}: {e}")
+                print(f"⚠️ Crash: {str(e)[:80]}")
                 stop_tracker.set()
                 await browser.close()
                 await asyncio.sleep(5)
 
-        print(f"❌ All {max_restarts} attempts failed for Scene {machine_id}!")
+        print(
+            f"❌ All {max_restarts} attempts failed "
+            f"for Scene {machine_id}!"
+        )
         return False
 
 # ============================================================
@@ -381,39 +519,69 @@ async def generate_video_upsampler(machine_id, img_path, motion_prompt, duration
 async def main():
     machine_id = int(sys.argv[1]) if len(sys.argv) > 1 else 1
 
-    # Config load karo
+    # Config load
     config = load_config()
 
     print(f"\n{'='*50}")
     print(f"🎬 VIDEO GENERATOR - Scene {machine_id}")
-    print(f"   Type     : {config.get('video_type', 'short').upper()}")
-    print(f"   Ratio    : {config.get('aspect_ratio', '9:16')}")
+    print(f"   Type     : {config.get('video_type','short').upper()}")
+    print(f"   Ratio    : {config.get('aspect_ratio','9:16')}")
+    print(f"   Character: {config.get('character','')[:50]}...")
     print(f"{'='*50}\n")
 
-    # Image path
+    # Image check
     img_path = os.path.join(IMAGE_DIR, f"scene_{machine_id}.jpg")
     if not os.path.exists(img_path):
         print(f"❌ Image not found: {img_path}")
-        return
+        # Fallback paths check
+        fallbacks = [
+            os.path.join(IMAGE_DIR, f"scene_{machine_id}.png"),
+            os.path.join(IMAGE_DIR, f"Generated_Image_{machine_id}.jpg"),
+        ]
+        for fb in fallbacks:
+            if os.path.exists(fb):
+                img_path = fb
+                print(f"✅ Found fallback: {img_path}")
+                break
+        else:
+            print(f"❌ No image found for scene {machine_id}!")
+            return
 
-    # Video prompts lo
+    # Video prompts load
+    print("📋 Loading video prompts...")
     video_prompts = read_video_prompts(config)
+
     motion_prompt = video_prompts.get(
         machine_id,
-        "Smooth cinematic movement, funny cartoon style, bright colors"
+        (
+            "Smooth cinematic movement, "
+            "funny cartoon style, "
+            "bright colors, "
+            "foley sound only, "
+            "no bgm, no voice"
+        )
     )
 
-    # Voice duration se clip length lo
+    # Voice duration
     clip_duration = get_clip_duration(machine_id)
-    print(f"⏱️  Clip Duration: {clip_duration}s")
 
-    # Video generate karo
-    await generate_video_upsampler(
+    print(f"\n📊 Scene {machine_id} Info:")
+    print(f"   🖼️  Image  : {img_path}")
+    print(f"   🎬 Prompt : {motion_prompt[:80]}...")
+    print(f"   ⏱️  Length : {clip_duration}s")
+
+    # Generate!
+    success = await generate_video_upsampler(
         machine_id,
         img_path,
         motion_prompt,
         clip_duration
     )
+
+    if success:
+        print(f"\n🎉 Scene {machine_id} COMPLETE!")
+    else:
+        print(f"\n❌ Scene {machine_id} FAILED!")
 
 if __name__ == "__main__":
     asyncio.run(main())
