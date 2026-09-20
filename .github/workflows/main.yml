@@ -1,15 +1,18 @@
-name: Advanced Cinematic AI Pipeline
+name: Advanced Cinematic AI Pipeline (High Retention)
 
 on:
   schedule:
-    - cron: '30 00 * * *'
-    - cron: '30 12 * * *'
-  workflow_dispatch:
+    - cron: '30 00 * * *'  # रोज़ सुबह 5:00 बजे (IST)
+    - cron: '30 12 * * *'  # रोज़ शाम 8:00 बजे (IST)
+  workflow_dispatch:       # जब चाहो मैन्युअल बटन से चलाओ
 
 permissions:
   contents: write
 
 jobs:
+  # ==========================================
+  # STAGE 1: AI SCRIPT GENERATION (OPENROUTER)
+  # ==========================================
   stage1-prompts:
     runs-on: ubuntu-latest
     steps:
@@ -17,22 +20,22 @@ jobs:
     - uses: actions/setup-python@v5
       with:
         python-version: '3.10'
-
-    - name: Generate AI Story Script
+        
+    - name: Generate AI Prompts (Comedy & Hooks)
       run: |
-        pip install openai
+        pip install openai      
         python auto_prompt.py
       env:
         OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-
-    - name: Commit updated files
+        
+    - name: Commit updated txt files
       run: |
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
-        git add story.txt metadata.txt prompts.txt music_prompt.txt
-        git commit -m "Auto-updated story files" || echo "No changes"
+        git add story.txt metadata.txt prompts.txt music_prompt.txt video_format.txt
+        git commit -m "Auto-updated script & format files" || echo "No changes to commit"
         git push
-
+        
     - uses: actions/upload-artifact@v4
       with:
         name: text-prompts
@@ -40,7 +43,8 @@ jobs:
           prompts.txt
           metadata.txt
           music_prompt.txt
-
+          video_format.txt
+          
     - id: set-matrix
       run: |
         count=$(grep -c '^' prompts.txt || echo 0)
@@ -50,8 +54,78 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
 
-  stage2-videos:
+  # ==========================================
+  # STAGE 1.5: ELEVENLABS VOICEOVER (NEW)
+  # ==========================================
+  stage-voice:
     needs: stage1-prompts
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        
+    - name: Install dependencies
+      run: pip install requests
+        
+    - uses: actions/download-artifact@v4
+      with:
+        name: text-prompts
+        
+    - name: Generate Voiceovers (Multi-API Fallback)
+      env:
+        ELEVENLABS_KEYS: ${{ secrets.ELEVENLABS_KEYS }}
+      run: python generate_voice.py
+      
+    - uses: actions/upload-artifact@v4
+      with:
+        name: scene-audio
+        path: scene_audio/
+
+  # ==========================================
+  # STAGE 2: IMAGE GENERATION (MAX 5 PARALLEL)
+  # ==========================================
+  stage2-images:
+    needs: stage1-prompts
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        machine_id: ${{ fromJson(needs.stage1-prompts.outputs.matrix) }}
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        
+    - name: Install Playwright & Requests
+      run: |
+        pip install requests playwright
+        playwright install chromium
+        playwright install-deps chromium
+        
+    - uses: actions/download-artifact@v4
+      with:
+        name: text-prompts
+        
+    - name: Generate Image (Bing AI)
+      env:
+        BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        CHAT_ID: ${{ secrets.CHAT_ID }}
+      run: python generate_image.py ${{ matrix.machine_id }}
+      
+    - uses: actions/upload-artifact@v4
+      with:
+        name: image_machine_${{ matrix.machine_id }}
+        path: scene_images/
+
+  # ==========================================
+  # STAGE 3: VIDEO GENERATION (MAX 2 PARALLEL)
+  # ==========================================
+  stage3-videos:
+    needs: [stage1-prompts, stage2-images]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -63,77 +137,84 @@ jobs:
     - uses: actions/setup-python@v5
       with:
         python-version: '3.10'
-
+        
     - name: Install Playwright
       run: |
         pip install requests playwright
         playwright install chromium
         playwright install-deps chromium
-
+        
     - uses: actions/download-artifact@v4
       with:
         name: text-prompts
-
-    - name: Generate Video from Text
+        
+    - uses: actions/download-artifact@v4
+      with:
+        name: image_machine_${{ matrix.machine_id }}
+        path: scene_images/
+        
+    - name: Generate Video (Upsampler AI)
       env:
         BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         CHAT_ID: ${{ secrets.CHAT_ID }}
       run: python generate_video.py ${{ matrix.machine_id }}
-
+      
     - uses: actions/upload-artifact@v4
       with:
         name: video_machine_${{ matrix.machine_id }}
         path: generated_videos/
 
-  stage3-post-process:
-    needs: stage2-videos
+  # ==========================================
+  # STAGE 4: SYNC AUDIO, EDIT & UPLOAD
+  # ==========================================
+  stage4-post-process:
+    needs: [stage-voice, stage3-videos]
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-python@v5
       with:
         python-version: '3.10'
-
-    - name: Install Dependencies
+        
+    - name: Install Dependencies (FFmpeg & Python)
       run: |
         sudo apt-get update && sudo apt-get install -y ffmpeg zip
         pip install google-api-python-client google-auth-httplib2 google-auth-oauthlib requests transformers torch scipy
-
+        
     - uses: actions/download-artifact@v4
       with:
         name: text-prompts
-
+        
+    - uses: actions/download-artifact@v4
+      with:
+        name: scene-audio
+        path: scene_audio/
+        
     - uses: actions/download-artifact@v4
       with:
         path: generated_videos/
         pattern: video_machine_*
         merge-multiple: true
 
-    - name: Download Random Outro
-      env:
-        GDRIVE_JSON: ${{ secrets.GDRIVE_JSON }}
-        GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
-      run: python download_outro.py
-
-    - name: Generate AI Music
+    - name: Generate Local AI Background Music
       run: python generate_music.py
-
-    - name: Seamless Merge + Crossfade + BGM
+        
+    - name: Apply Hard Cuts, Voice Sync & Aspect Ratio (No Fades)
       run: python process_videos.py
-
-    - name: Create ZIP Backup
+      
+    - name: Create Downloadable ZIP (Backup)
       run: |
         if [ -f "bgm.wav" ]; then
-          zip -r Final_Long_Video_Package.zip final_output/Final_4K_Monetizable_Long_Video.mp4 metadata.txt bgm.wav
+          zip -r Final_Video_Package.zip final_output/Final_4K_Monetizable.mp4 metadata.txt bgm.wav
         else
-          zip -r Final_Long_Video_Package.zip final_output/Final_4K_Monetizable_Long_Video.mp4 metadata.txt
+          zip -r Final_Video_Package.zip final_output/Final_4K_Monetizable.mp4 metadata.txt
         fi
-
+      
     - uses: actions/upload-artifact@v4
       with:
-        name: Ready_Long_Video
-        path: Final_Long_Video_Package.zip
-
+        name: Ready_To_Download_Video
+        path: Final_Video_Package.zip
+        
     - name: Auto Upload to YouTube
       env:
         YOUTUBE_TOKEN_BASE64: ${{ secrets.YOUTUBE_TOKEN_BASE64 }}
