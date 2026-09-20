@@ -1,56 +1,241 @@
-name: Advanced Cinematic Pipeline
+name: Advanced Cinematic AI Pipeline
 
 on:
   schedule:
-    - cron: '30 00 * * *' 
-    - cron: '30 12 * * *' 
-  workflow_dispatch:
+    - cron: '30 00 * * *'   # Roz Subah 6:00 AM IST
+    - cron: '30 12 * * *'   # Roz Shaam 6:00 PM IST
+  workflow_dispatch:          # Manual run
+
+permissions:
+  contents: write
 
 jobs:
-  build-and-deploy:
+  # ============================================================
+  # STAGE 1: AI SCRIPT + VOICE GENERATION
+  # ============================================================
+  stage1-script:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-python@v5
       with:
         python-version: '3.10'
 
-    - name: Install FFmpeg
-      run: sudo apt-get update && sudo apt-get install -y ffmpeg
-
     - name: Install Dependencies
-      run: pip install -r requirements.txt
+      run: pip install openai requests
 
-    - name: Install Playwright
-      run: playwright install chromium
-
-    - name: 1. Generate Script
+    - name: Generate AI Script + Metadata
       run: python auto_prompt.py
       env:
         OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 
-    - name: 2. Generate Voice
+    - name: Generate Hindi Voice (ElevenLabs)
       run: python generate_voice.py
       env:
-        ELEVENLABS_API_KEYS: ${{ secrets.ELEVENLABS_API_KEYS }}
+        ELEVENLABS_API_KEY_1: ${{ secrets.ELEVENLABS_API_KEY_1 }}
+        ELEVENLABS_API_KEY_2: ${{ secrets.ELEVENLABS_API_KEY_2 }}
+        ELEVENLABS_API_KEY_3: ${{ secrets.ELEVENLABS_API_KEY_3 }}
+        ELEVENLABS_API_KEY_4: ${{ secrets.ELEVENLABS_API_KEY_4 }}
+        ELEVENLABS_API_KEY_5: ${{ secrets.ELEVENLABS_API_KEY_5 }}
+        ELEVENLABS_API_KEY_6: ${{ secrets.ELEVENLABS_API_KEY_6 }}
+        ELEVENLABS_VOICE_ID:  ${{ secrets.ELEVENLABS_VOICE_ID }}
 
-    - name: 3. Generate Images
-      run: python generate_image.py
-
-    - name: 4. Generate Videos
+    - name: Commit Updated Files
       run: |
-        count=1
-        while [ -f "scene_images/scene_$count.jpg" ]; do
-           python generate_video.py $count
-           count=$((count + 1))
-        done
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add story.txt prompts.txt metadata.txt music_prompt.txt video_config.json timing_map.json
+        git commit -m "Auto: Script + Voice generated" || echo "No changes"
+        git push
 
-    - name: 5. Process & Edit
+    - name: Upload Stage 1 Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: stage1-files
+        path: |
+          prompts.txt
+          metadata.txt
+          music_prompt.txt
+          video_config.json
+          timing_map.json
+          scene_voices/
+
+    - id: set-matrix
+      run: |
+        count=$(grep -c '^' prompts.txt || echo 0)
+        if [ "$count" -eq 0 ]; then exit 1; fi
+        matrix_json=$(python3 -c "
+        import json
+        print(json.dumps(list(range(1, $count + 1))))
+        ")
+        echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
+
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+
+  # ============================================================
+  # STAGE 2: IMAGE GENERATION (MAX 5 PARALLEL)
+  # ============================================================
+  stage2-images:
+    needs: stage1-script
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        machine_id: ${{ fromJson(needs.stage1-script.outputs.matrix) }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install Dependencies
+      run: |
+        pip install requests playwright
+        playwright install chromium
+        playwright install-deps chromium
+
+    - name: Download Stage 1 Files
+      uses: actions/download-artifact@v4
+      with:
+        name: stage1-files
+
+    - name: Generate Image (Bing AI)
+      run: python generate_image.py ${{ matrix.machine_id }}
+      env:
+        BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        CHAT_ID:   ${{ secrets.CHAT_ID }}
+
+    - name: Upload Image Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: image_machine_${{ matrix.machine_id }}
+        path: scene_images/
+
+  # ============================================================
+  # STAGE 3: VIDEO GENERATION (MAX 2 PARALLEL)
+  # ============================================================
+  stage3-videos:
+    needs: [stage1-script, stage2-images]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        machine_id: ${{ fromJson(needs.stage1-script.outputs.matrix) }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install Dependencies
+      run: |
+        pip install requests playwright
+        playwright install chromium
+        playwright install-deps chromium
+
+    - name: Download Stage 1 Files
+      uses: actions/download-artifact@v4
+      with:
+        name: stage1-files
+
+    - name: Download Image
+      uses: actions/download-artifact@v4
+      with:
+        name: image_machine_${{ matrix.machine_id }}
+        path: scene_images/
+
+    - name: Generate Video (Upsampler AI)
+      run: python generate_video.py ${{ matrix.machine_id }}
+      env:
+        BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        CHAT_ID:   ${{ secrets.CHAT_ID }}
+
+    - name: Upload Video Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: video_machine_${{ matrix.machine_id }}
+        path: generated_videos/
+
+  # ============================================================
+  # STAGE 4: PROCESS + MERGE + UPLOAD
+  # ============================================================
+  stage4-post-process:
+    needs: stage3-videos
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update && sudo apt-get install -y ffmpeg zip
+        pip install \
+          google-api-python-client \
+          google-auth-httplib2 \
+          google-auth-oauthlib \
+          requests \
+          transformers \
+          torch \
+          scipy
+
+    - name: Download Stage 1 Files
+      uses: actions/download-artifact@v4
+      with:
+        name: stage1-files
+
+    - name: Download All Videos
+      uses: actions/download-artifact@v4
+      with:
+        path: generated_videos/
+        pattern: video_machine_*
+        merge-multiple: true
+
+    - name: Download Random Outro
+      run: python download_outro.py
+      env:
+        GDRIVE_JSON:      ${{ secrets.GDRIVE_JSON }}
+        GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+
+    - name: Generate AI Background Music
+      run: python generate_music.py
+
+    - name: Process + Merge + Voice Sync
       run: python process_videos.py
 
-    - name: 6. Upload to YouTube
+    - name: Create ZIP Package
+      run: |
+        if [ -f "bgm.wav" ]; then
+          zip -r Final_Package.zip \
+            final_output/Final_4K_Monetizable_Short.mp4 \
+            metadata.txt \
+            bgm.wav \
+            timing_map.json
+        else
+          zip -r Final_Package.zip \
+            final_output/Final_4K_Monetizable_Short.mp4 \
+            metadata.txt \
+            timing_map.json
+        fi
+
+    - name: Upload ZIP Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Ready_To_Download_Video
+        path: Final_Package.zip
+
+    - name: Auto Upload to YouTube
       run: python upload_youtube.py
       env:
         YOUTUBE_TOKEN_BASE64: ${{ secrets.YOUTUBE_TOKEN_BASE64 }}
