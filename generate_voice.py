@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import time
+import subprocess
 import requests
 
 # ============================================================
@@ -13,178 +14,170 @@ VOICE_DIR   = "scene_voices"
 os.makedirs(VOICE_DIR, exist_ok=True)
 
 # ============================================================
-# ELEVENLABS MULTI-KEY MANAGER
+# KOKORO TTS INSTALLER
 # ============================================================
-def get_api_keys():
+def install_kokoro():
     """
-    Secrets se saari API keys lo
-    ELEVENLABS_API_KEY_1, _2, _3, _4, _5, _6
+    Kokoro TTS install karo
     """
-    keys = []
-    for i in range(1, 7):
-        key = os.getenv(f"ELEVENLABS_API_KEY_{i}", "").strip()
-        if key:
-            keys.append(key)
-
-    if not keys:
-        print("❌ ERROR: Koi bhi ElevenLabs API key nahi mili!")
-        sys.exit(1)
-
-    print(f"✅ {len(keys)} ElevenLabs API key(s) mili!")
-    return keys
+    print("📦 Installing Kokoro TTS...")
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", 
+             "kokoro-onnx", "soundfile", "numpy"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        print("✅ Kokoro TTS installed!")
+        return True
+    except Exception as e:
+        print(f"❌ Kokoro install failed: {e}")
+        return False
 
 # ============================================================
-# CREDIT CHECKER
+# HINDI TRANSLITERATOR
 # ============================================================
-def check_credits(api_key):
+def prepare_hindi_text(text):
     """
-    Check karo is key mein credits hain ya nahi
+    Hindi text ko Kokoro ke liye prepare karo
+    Kokoro Hindi ko Roman script mein best samajhta hai
     """
     try:
-        url     = "https://api.elevenlabs.io/v1/user"
-        headers = {"xi-api-key": api_key}
-        response = requests.get(url, headers=headers, timeout=10)
+        # Agar text already Roman/English hai
+        if all(ord(c) < 128 for c in text):
+            return text
 
-        print(f"   📡 Status Code: {response.status_code}")
+        # Hindi Devanagari to Roman transliteration
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "indic-transliteration"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
 
-        if response.status_code == 200:
-            data         = response.json()
-            subscription = data.get("subscription", {})
-            used         = subscription.get("character_count", 0)
-            limit        = subscription.get("character_limit", 10000)
-            remaining    = limit - used
-            print(f"   💳 Credits remaining: {remaining}/{limit}")
-            return remaining > 100
+        from indic_transliteration import sanscript
+        from indic_transliteration.sanscript import transliterate
 
-        elif response.status_code == 401:
-            print(f"   ❌ Invalid API Key!")
-            return False
-
-        else:
-            print(f"   ⚠️ Status: {response.status_code} - Trying anyway...")
-            # Unknown error pe bhi try karne do
-            return True
+        roman_text = transliterate(
+            text,
+            sanscript.DEVANAGARI,
+            sanscript.ITRANS
+        )
+        print(f"   🔤 Transliterated: {roman_text[:60]}...")
+        return roman_text
 
     except Exception as e:
-        print(f"   ⚠️ Credit check error: {e}")
-        # Error pe bhi True do taaki generation try ho
-        return True
+        print(f"   ⚠️ Transliteration failed: {e}. Using original.")
+        return text
 
 # ============================================================
-# WORKING KEY FINDER
+# KOKORO VOICE GENERATOR
 # ============================================================
-def get_working_key(api_keys):
+def generate_voice_kokoro(scene_id, text):
     """
-    Saari keys check karo, jo kaam kare woh do
-    Auto switch karta hai
+    Kokoro TTS se voice generate karo
+    Male energetic Hindi voice
     """
-    for idx, key in enumerate(api_keys, 1):
-        print(f"\n🔑 Checking API Key {idx}...")
-        if check_credits(key):
-            print(f"✅ Key {idx} is working! Using this key.")
-            return key
-        else:
-            print(f"❌ Key {idx} has no credits. Trying next...")
+    out_path = os.path.join(VOICE_DIR, f"voice_{scene_id}.wav")
+    mp3_path = os.path.join(VOICE_DIR, f"voice_{scene_id}.mp3")
 
-    print("❌ CRITICAL: Saari API keys ke credits khatam ho gaye!")
-    sys.exit(1)
+    # Pehle se bana hai toh skip
+    if os.path.exists(mp3_path) and os.path.getsize(mp3_path) > 1000:
+        print(f"⏭️  Scene {scene_id} already exists. Skipping.")
+        return mp3_path
+
+    try:
+        from kokoro_onnx import Kokoro
+        import soundfile as sf
+        import numpy as np
+
+        print(f"🎙️  Generating voice for Scene {scene_id}...")
+
+        # Kokoro initialize karo
+        kokoro = Kokoro("kokoro-v0_19.onnx", "voices.bin")
+
+        # Text prepare karo
+        prepared_text = prepare_hindi_text(text)
+
+        # Voice generate karo
+        # am_michael = energetic male voice
+        samples, sample_rate = kokoro.create(
+            prepared_text,
+            voice="am_michael",   # Energetic Male
+            speed=1.1,            # Thoda fast - energetic feel
+            lang="en-us"
+        )
+
+        # WAV save karo
+        sf.write(out_path, samples, sample_rate)
+
+        # WAV to MP3 convert karo
+        subprocess.run(
+            [
+                "ffmpeg", "-y",
+                "-i", out_path,
+                "-codec:a", "libmp3lame",
+                "-qscale:a", "2",
+                mp3_path
+            ],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+
+        # WAV delete karo
+        if os.path.exists(out_path):
+            os.remove(out_path)
+
+        size = os.path.getsize(mp3_path)
+        print(f"✅ Scene {scene_id} voice ready! ({size} bytes)")
+        return mp3_path
+
+    except Exception as e:
+        print(f"❌ Kokoro failed for Scene {scene_id}: {e}")
+        return None
 
 # ============================================================
-# VOICE GENERATOR
+# KOKORO MODEL DOWNLOADER
 # ============================================================
-def generate_voice_for_scene(
-    scene_id,
-    hindi_text,
-    api_key,
-    voice_id,
-    api_keys
-):
+def download_kokoro_models():
     """
-    Ek scene ke liye Hindi voice generate karo
-    Agar key fail ho toh auto switch karo
+    Kokoro ke models download karo
+    Sirf pehli baar download hoga
     """
-    out_path = os.path.join(VOICE_DIR, f"voice_{scene_id}.mp3")
-
-    # Pehle se bani hai toh skip
-    if os.path.exists(out_path) and os.path.getsize(out_path) > 1000:
-        print(f"⏭️  Scene {scene_id} voice already exists. Skipping.")
-        return out_path, api_key
-
-    url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
-
-    payload = {
-        "text": hindi_text,
-        "model_id": "eleven_multilingual_v2",
-        "voice_settings": {
-            "stability": 0.35,
-            "similarity_boost": 0.80,
-            "style": 0.70,
-            "use_speaker_boost": True
-        }
+    models = {
+        "kokoro-v0_19.onnx": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files/kokoro-v0_19.onnx",
+        "voices.bin": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files/voices.bin"
     }
 
-    max_retries = 3
-    current_key = api_key
-    key_index   = api_keys.index(api_key)
+    for filename, url in models.items():
+        if os.path.exists(filename):
+            print(f"✅ {filename} already exists!")
+            continue
 
-    for attempt in range(1, max_retries + 1):
-        print(f"🎙️  Scene {scene_id} - Attempt {attempt}/{max_retries}")
-
+        print(f"📥 Downloading {filename}...")
         try:
-            headers = {
-                "xi-api-key": current_key,
-                "Content-Type": "application/json",
-                "Accept": "audio/mpeg"
-            }
+            response = requests.get(url, stream=True, timeout=120)
+            total    = int(response.headers.get("content-length", 0))
+            downloaded = 0
 
-            response = requests.post(
-                url,
-                json=payload,
-                headers=headers,
-                timeout=60
-            )
+            with open(filename, "wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    if total > 0:
+                        pct = int(downloaded * 100 / total)
+                        if pct % 20 == 0:
+                            print(f"   📊 {pct}% downloaded...")
 
-            print(f"   📡 Status: {response.status_code}")
-
-            # ✅ Success
-            if response.status_code == 200:
-                with open(out_path, "wb") as f:
-                    f.write(response.content)
-                size = len(response.content)
-                print(f"✅ Scene {scene_id} voice done! ({size} bytes)")
-                return out_path, current_key
-
-            # 💳 Credits khatam
-            elif response.status_code in [401, 429]:
-                print(f"⚠️  Key exhausted! Switching to next key...")
-                key_index += 1
-                if key_index < len(api_keys):
-                    current_key = api_keys[key_index]
-                    print(f"🔑 Switched to Key {key_index + 1}")
-                    time.sleep(2)
-                else:
-                    print("❌ Saari keys khatam ho gayi!")
-                    sys.exit(1)
-
-            # ⚠️ Server error
-            elif response.status_code >= 500:
-                print(f"⚠️  Server error. Retrying in 5s...")
-                time.sleep(5)
-
-            else:
-                print(f"⚠️  Error {response.status_code}: {response.text[:150]}")
-                time.sleep(3)
-
-        except requests.exceptions.Timeout:
-            print(f"⚠️  Timeout! Retrying...")
-            time.sleep(5)
+            print(f"✅ {filename} downloaded!")
 
         except Exception as e:
-            print(f"⚠️  Exception: {e}")
-            time.sleep(3)
+            print(f"❌ Download failed for {filename}: {e}")
+            return False
 
-    print(f"❌ Scene {scene_id} voice failed!")
-    return None, current_key
+    return True
 
 # ============================================================
 # NARRATION EXTRACTOR
@@ -213,12 +206,11 @@ def extract_narrations():
             if hindi_text:
                 narrations[idx] = hindi_text
         else:
-            # Fallback - poori line narration
             narrations[idx] = line
 
     print(f"📝 {len(narrations)} narration scenes extracted!")
 
-    # Debug - pehle 2 scenes print karo
+    # Debug
     for k, v in list(narrations.items())[:2]:
         print(f"   Scene {k}: {v[:60]}...")
 
@@ -229,10 +221,9 @@ def extract_narrations():
 # ============================================================
 def get_audio_duration(audio_path):
     """
-    Audio file ki duration nikalo ffprobe se
+    Audio duration nikalo ffprobe se
     """
     try:
-        import subprocess
         result = subprocess.run(
             [
                 "ffprobe",
@@ -285,35 +276,29 @@ def create_timing_map(voice_files):
 # ============================================================
 def main():
     print("\n" + "="*50)
-    print("🎙️  ELEVENLABS HINDI VOICE GENERATOR")
+    print("🎙️  KOKORO TTS - FREE HINDI VOICE GENERATOR")
     print("="*50 + "\n")
 
-    # Voice ID
-    voice_id = os.getenv(
-        "ELEVENLABS_VOICE_ID",
-        "pNInz6obpgDQGcFmaJgB"  # Default Adam - Energetic Male
-    ).strip()
+    # Step 1: Install karo
+    if not install_kokoro():
+        print("❌ Installation failed!")
+        sys.exit(1)
 
-    # Agar voice id empty ho toh default use karo
-    if not voice_id:
-        voice_id = "pNInz6obpgDQGcFmaJgB"
+    # Step 2: Models download karo
+    print("\n📥 Checking Kokoro models...")
+    if not download_kokoro_models():
+        print("❌ Model download failed!")
+        sys.exit(1)
 
-    print(f"🎤 Voice ID: {voice_id}")
-
-    # API Keys lo
-    api_keys = get_api_keys()
-
-    # Working key dhundo
-    current_key = get_working_key(api_keys)
-
-    # Narrations nikalo
+    # Step 3: Narrations nikalo
+    print("\n📝 Extracting narrations...")
     narrations = extract_narrations()
 
     if not narrations:
         print("❌ Koi narration nahi mila!")
         sys.exit(1)
 
-    # Har scene ke liye voice banao
+    # Step 4: Har scene ke liye voice banao
     print(f"\n🚀 Generating voices for {len(narrations)} scenes...\n")
     voice_files = {}
 
@@ -321,18 +306,15 @@ def main():
         print(f"\n--- Scene {scene_id} ---")
         print(f"📝 Text: {hindi_text[:80]}...")
 
-        voice_path, current_key = generate_voice_for_scene(
-            scene_id   = scene_id,
-            hindi_text = hindi_text,
-            api_key    = current_key,
-            voice_id   = voice_id,
-            api_keys   = api_keys
+        voice_path = generate_voice_kokoro(
+            scene_id = scene_id,
+            text     = hindi_text
         )
 
         voice_files[scene_id] = voice_path
-        time.sleep(0.5)
+        time.sleep(0.3)
 
-    # Timing map banao
+    # Step 5: Timing map banao
     print("\n⏱️  Creating timing map...")
     timing_map = create_timing_map(voice_files)
 
