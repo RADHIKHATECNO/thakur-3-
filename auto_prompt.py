@@ -55,13 +55,55 @@ def call_openrouter(system_prompt, user_prompt, model_name):
         print(f"⚠️ Request Failed: {e}")
         return None
 
-def get_best_free_models():
+def get_best_live_free_models():
+    """🤖 MAGIC: Live scan for the most powerful FREE models right now!"""
+    print("🔍 Scanning OpenRouter for the most powerful LIVE FREE models...")
+    try:
+        response = requests.get("https://openrouter.ai/api/v1/models", timeout=15)
+        if response.status_code == 200:
+            models_data = response.json().get("data", [])
+            free_models = []
+            
+            for m in models_data:
+                m_id = m.get("id", "")
+                pricing = m.get("pricing", {})
+                
+                # Check if model is free (Prompt & Completion price = 0)
+                try: p_prompt = float(pricing.get("prompt", 1))
+                except: p_prompt = 1
+                try: p_comp = float(pricing.get("completion", 1))
+                except: p_comp = 1
+                
+                if m_id.endswith(":free") or (p_prompt == 0.0 and p_comp == 0.0):
+                    ctx_len = m.get("context_length", 0)
+                    score = ctx_len
+                    
+                    # 💡 Rating System: Add bonus score for world-class storytellers
+                    lower_id = m_id.lower()
+                    if "gemini" in lower_id: score += 1000000
+                    elif "llama-3" in lower_id or "70b" in lower_id: score += 900000
+                    elif "qwen" in lower_id and "72b" in lower_id: score += 800000
+                    elif "gemma" in lower_id or "mistral" in lower_id: score += 500000
+                    
+                    free_models.append({"id": m_id, "score": score})
+            
+            # Sort by highest score (Most powerful model first)
+            free_models.sort(key=lambda x: x["score"], reverse=True)
+            top_models = [m["id"] for m in free_models[:10]] # Pick Top 10
+            
+            if top_models:
+                print(f"🌟 Found {len(top_models)} active Free Models! Top pick: {top_models[0]}")
+                return top_models
+    except Exception as e:
+        print(f"⚠️ Live scan failed: {e}")
+        
+    # Fallback list just in case OpenRouter's scanner API is down
+    print("⚠️ Using Fallback Free Models.")
     return [
-        "google/gemma-2-27b-it:free",               
-        "google/gemma-2-9b-it:free",                
-        "google/gemini-2.0-flash-lite-preview-02-05:free", 
-        "google/gemini-2.0-pro-exp-02-05:free",     
-        "meta-llama/llama-3.3-70b-instruct:free"    
+        "google/gemini-2.0-flash-exp:free",
+        "mistralai/mistral-7b-instruct:free",
+        "openchat/openchat-7b:free",
+        "qwen/qwen-vl-plus:free"
     ]
 
 def generate_ai_script(duration_str, style, topic, character_rules):
@@ -97,7 +139,8 @@ def generate_ai_script(duration_str, style, topic, character_rules):
     
     START DIRECTLY WITH THE FIRST LINE. NO INTRO. NO OUTRO."""
     
-    models = get_best_free_models()
+    # AI dynamically best free models nikal raha hai
+    models = get_best_live_free_models()
     
     for model in models:
         print(f"🔄 Trying model: {model}...")
@@ -121,9 +164,9 @@ def generate_ai_script(duration_str, style, topic, character_rules):
 
 def generate_ai_metadata(topic):
     prompt = f"Topic: '{topic}'. Format EXACTLY:\nTITLE: [Clickbaity Viral Title]\nDESC: [Engaging description.]\nTAGS: [tag1, tag2]\nMUSIC: [10-word prompt for AI background music]"
-    models = get_best_free_models()
+    models = get_best_live_free_models()
     
-    for model in models:
+    for model in models[:5]: # Try top 5 for metadata
         print(f"🎵 Generating Metadata using {model}...")
         text = call_openrouter("You are a YouTube SEO Expert.", prompt, model)
         if text:
@@ -150,6 +193,8 @@ def main():
     if len(parts) >= 3: duration_str, style, topic = parts[0], parts[1], parts[2]
     else: duration_str, style, topic = "2 min", "Cinematic Realistic", stories[0]
         
+    print(f"🎬 Planning: {topic} | Length: {duration_str} | Style: {style}")
+    
     script_content = generate_ai_script(duration_str, style, topic, character_rules)
     with open(PROMPT_FILE, "w", encoding="utf-8") as f: f.write(script_content + "\n")
         
