@@ -9,183 +9,16 @@ import requests
 # CONFIG
 # ============================================================
 PROMPT_FILE = "prompts.txt"
-CONFIG_FILE = "video_config.json"
 VOICE_DIR   = "scene_voices"
 os.makedirs(VOICE_DIR, exist_ok=True)
-
-# ============================================================
-# KOKORO TTS INSTALLER
-# ============================================================
-def install_kokoro():
-    """
-    Kokoro TTS install karo
-    """
-    print("📦 Installing Kokoro TTS...")
-    try:
-        subprocess.run(
-            [sys.executable, "-m", "pip", "install", 
-             "kokoro-onnx", "soundfile", "numpy"],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
-        print("✅ Kokoro TTS installed!")
-        return True
-    except Exception as e:
-        print(f"❌ Kokoro install failed: {e}")
-        return False
-
-# ============================================================
-# HINDI TRANSLITERATOR
-# ============================================================
-def prepare_hindi_text(text):
-    """
-    Hindi text ko Kokoro ke liye prepare karo
-    Kokoro Hindi ko Roman script mein best samajhta hai
-    """
-    try:
-        # Agar text already Roman/English hai
-        if all(ord(c) < 128 for c in text):
-            return text
-
-        # Hindi Devanagari to Roman transliteration
-        subprocess.run(
-            [sys.executable, "-m", "pip", "install", "indic-transliteration"],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
-
-        from indic_transliteration import sanscript
-        from indic_transliteration.sanscript import transliterate
-
-        roman_text = transliterate(
-            text,
-            sanscript.DEVANAGARI,
-            sanscript.ITRANS
-        )
-        print(f"   🔤 Transliterated: {roman_text[:60]}...")
-        return roman_text
-
-    except Exception as e:
-        print(f"   ⚠️ Transliteration failed: {e}. Using original.")
-        return text
-
-# ============================================================
-# KOKORO VOICE GENERATOR
-# ============================================================
-def generate_voice_kokoro(scene_id, text):
-    """
-    Kokoro TTS se voice generate karo
-    Male energetic Hindi voice
-    """
-    out_path = os.path.join(VOICE_DIR, f"voice_{scene_id}.wav")
-    mp3_path = os.path.join(VOICE_DIR, f"voice_{scene_id}.mp3")
-
-    # Pehle se bana hai toh skip
-    if os.path.exists(mp3_path) and os.path.getsize(mp3_path) > 1000:
-        print(f"⏭️  Scene {scene_id} already exists. Skipping.")
-        return mp3_path
-
-    try:
-        from kokoro_onnx import Kokoro
-        import soundfile as sf
-        import numpy as np
-
-        print(f"🎙️  Generating voice for Scene {scene_id}...")
-
-        # Kokoro initialize karo
-        kokoro = Kokoro("kokoro-v0_19.onnx", "voices.bin")
-
-        # Text prepare karo
-        prepared_text = prepare_hindi_text(text)
-
-        # Voice generate karo
-        # am_michael = energetic male voice
-        samples, sample_rate = kokoro.create(
-            prepared_text,
-            voice="am_michael",   # Energetic Male
-            speed=1.1,            # Thoda fast - energetic feel
-            lang="en-us"
-        )
-
-        # WAV save karo
-        sf.write(out_path, samples, sample_rate)
-
-        # WAV to MP3 convert karo
-        subprocess.run(
-            [
-                "ffmpeg", "-y",
-                "-i", out_path,
-                "-codec:a", "libmp3lame",
-                "-qscale:a", "2",
-                mp3_path
-            ],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
-
-        # WAV delete karo
-        if os.path.exists(out_path):
-            os.remove(out_path)
-
-        size = os.path.getsize(mp3_path)
-        print(f"✅ Scene {scene_id} voice ready! ({size} bytes)")
-        return mp3_path
-
-    except Exception as e:
-        print(f"❌ Kokoro failed for Scene {scene_id}: {e}")
-        return None
-
-# ============================================================
-# KOKORO MODEL DOWNLOADER
-# ============================================================
-def download_kokoro_models():
-    """
-    Kokoro ke models download karo
-    Sirf pehli baar download hoga
-    """
-    models = {
-        "kokoro-v0_19.onnx": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files/kokoro-v0_19.onnx",
-        "voices.bin": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files/voices.bin"
-    }
-
-    for filename, url in models.items():
-        if os.path.exists(filename):
-            print(f"✅ {filename} already exists!")
-            continue
-
-        print(f"📥 Downloading {filename}...")
-        try:
-            response = requests.get(url, stream=True, timeout=120)
-            total    = int(response.headers.get("content-length", 0))
-            downloaded = 0
-
-            with open(filename, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-                    downloaded += len(chunk)
-                    if total > 0:
-                        pct = int(downloaded * 100 / total)
-                        if pct % 20 == 0:
-                            print(f"   📊 {pct}% downloaded...")
-
-            print(f"✅ {filename} downloaded!")
-
-        except Exception as e:
-            print(f"❌ Download failed for {filename}: {e}")
-            return False
-
-    return True
 
 # ============================================================
 # NARRATION EXTRACTOR
 # ============================================================
 def extract_narrations():
     """
-    prompts.txt se Hindi narration part nikalo
-    Format: visual_prompt | hindi_narration
+    prompts.txt se SIRF Hindi narration nikalo
+    Format: NARRATION >> IMAGE_PROMPT >> VIDEO_PROMPT
     """
     if not os.path.exists(PROMPT_FILE):
         print(f"❌ {PROMPT_FILE} not found!")
@@ -200,43 +33,211 @@ def extract_narrations():
         if not line:
             continue
 
-        if "|" in line:
-            parts      = line.split("|", 1)
-            hindi_text = parts[1].strip()
-            if hindi_text:
-                narrations[idx] = hindi_text
+        if ">>" in line:
+            # NARRATION >> IMAGE >> VIDEO
+            parts          = line.split(">>")
+            hindi_narration = parts[0].strip()
+            narrations[idx] = hindi_narration
+        elif "|" in line:
+            # Old format fallback
+            parts          = line.split("|")
+            hindi_narration = parts[1].strip() if len(parts) > 1 else parts[0].strip()
+            narrations[idx] = hindi_narration
         else:
             narrations[idx] = line
 
-    print(f"📝 {len(narrations)} narration scenes extracted!")
-
-    # Debug
+    print(f"📝 {len(narrations)} narrations extracted!")
     for k, v in list(narrations.items())[:2]:
-        print(f"   Scene {k}: {v[:60]}...")
+        print(f"   Scene {k}: {v[:70]}...")
 
     return narrations
 
 # ============================================================
+# KOKORO INSTALLER
+# ============================================================
+def install_kokoro():
+    print("📦 Installing Kokoro TTS...")
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install",
+             "kokoro-onnx", "soundfile", "numpy"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        print("✅ Kokoro installed!")
+        return True
+    except Exception as e:
+        print(f"❌ Install failed: {e}")
+        return False
+
+# ============================================================
+# MODEL DOWNLOADER
+# ============================================================
+def download_kokoro_models():
+    models = {
+        "kokoro-v0_19.onnx": (
+            "https://github.com/thewh1teagle/kokoro-onnx/"
+            "releases/download/model-files/kokoro-v0_19.onnx"
+        ),
+        "voices.bin": (
+            "https://github.com/thewh1teagle/kokoro-onnx/"
+            "releases/download/model-files/voices.bin"
+        )
+    }
+
+    for filename, url in models.items():
+        if os.path.exists(filename):
+            size = os.path.getsize(filename)
+            print(f"✅ {filename} exists ({size} bytes)")
+            continue
+
+        print(f"📥 Downloading {filename}...")
+        try:
+            response   = requests.get(url, stream=True, timeout=300)
+            total      = int(response.headers.get("content-length", 0))
+            downloaded = 0
+
+            with open(filename, "wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    if total > 0:
+                        pct = int(downloaded * 100 / total)
+                        if pct % 25 == 0:
+                            print(f"   {pct}%...")
+
+            print(f"✅ {filename} downloaded!")
+        except Exception as e:
+            print(f"❌ Failed: {e}")
+            return False
+
+    return True
+
+# ============================================================
+# HINDI TEXT PREPARER
+# ============================================================
+def prepare_hindi_text(text):
+    """
+    Hindi ko Roman mein convert karo
+    Kokoro ke liye
+    """
+    try:
+        # Check if already Roman
+        hindi_chars = sum(
+            1 for c in text
+            if '\u0900' <= c <= '\u097F'
+        )
+
+        if hindi_chars == 0:
+            return text  # Already Roman
+
+        # Install transliteration
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install",
+             "indic-transliteration"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+
+        from indic_transliteration import sanscript
+        from indic_transliteration.sanscript import transliterate
+
+        roman = transliterate(
+            text,
+            sanscript.DEVANAGARI,
+            sanscript.ITRANS
+        )
+
+        # Fix common issues
+        roman = roman.replace("  ", " ").strip()
+        print(f"   🔤 Hindi→Roman: {roman[:60]}...")
+        return roman
+
+    except Exception as e:
+        print(f"   ⚠️ Transliteration failed: {e}")
+        return text
+
+# ============================================================
+# VOICE GENERATOR
+# ============================================================
+def generate_voice_kokoro(scene_id, hindi_text):
+    """
+    Kokoro TTS se Hindi voice generate karo
+    """
+    wav_path = os.path.join(VOICE_DIR, f"voice_{scene_id}.wav")
+    mp3_path = os.path.join(VOICE_DIR, f"voice_{scene_id}.mp3")
+
+    # Already exists?
+    if os.path.exists(mp3_path) and os.path.getsize(mp3_path) > 1000:
+        print(f"⏭️  Scene {scene_id} already done!")
+        return mp3_path
+
+    try:
+        from kokoro_onnx import Kokoro
+        import soundfile as sf
+
+        print(f"🎙️  Scene {scene_id} generating...")
+
+        # Text prepare karo
+        roman_text = prepare_hindi_text(hindi_text)
+
+        # Kokoro init
+        kokoro = Kokoro("kokoro-v0_19.onnx", "voices.bin")
+
+        # Voice generate
+        samples, sample_rate = kokoro.create(
+            roman_text,
+            voice="am_michael",  # Energetic Male
+            speed=1.15,          # Thoda fast energetic
+            lang="en-us"
+        )
+
+        # WAV save
+        sf.write(wav_path, samples, sample_rate)
+
+        # MP3 convert
+        subprocess.run(
+            [
+                "ffmpeg", "-y",
+                "-i", wav_path,
+                "-codec:a", "libmp3lame",
+                "-qscale:a", "2",
+                "-ar", "44100",
+                mp3_path
+            ],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+
+        # WAV delete
+        if os.path.exists(wav_path):
+            os.remove(wav_path)
+
+        size = os.path.getsize(mp3_path)
+        print(f"✅ Scene {scene_id} done! ({size} bytes)")
+        return mp3_path
+
+    except Exception as e:
+        print(f"❌ Scene {scene_id} failed: {e}")
+        return None
+
+# ============================================================
 # AUDIO DURATION
 # ============================================================
-def get_audio_duration(audio_path):
-    """
-    Audio duration nikalo ffprobe se
-    """
+def get_audio_duration(path):
     try:
         result = subprocess.run(
             [
-                "ffprobe",
-                "-v", "quiet",
+                "ffprobe", "-v", "quiet",
                 "-show_entries", "format=duration",
-                "-of", "csv=p=0",
-                audio_path
+                "-of", "csv=p=0", path
             ],
-            capture_output=True,
-            text=True
+            capture_output=True, text=True
         )
-        duration = float(result.stdout.strip())
-        return round(duration, 2)
+        return round(float(result.stdout.strip()), 2)
     except:
         return 4.0
 
@@ -244,31 +245,26 @@ def get_audio_duration(audio_path):
 # TIMING MAP
 # ============================================================
 def create_timing_map(voice_files):
-    """
-    Har scene ki audio duration save karo
-    process_videos.py use karega sync ke liye
-    """
     timing_map = {}
 
     for scene_id, voice_path in voice_files.items():
         if voice_path and os.path.exists(voice_path):
-            duration = get_audio_duration(voice_path)
+            dur = get_audio_duration(voice_path)
             timing_map[str(scene_id)] = {
-                "voice_path": voice_path,
-                "duration_sec": duration
+                "voice_path"  : voice_path,
+                "duration_sec": dur
             }
-            print(f"   ⏱️  Scene {scene_id}: {duration}s")
+            print(f"   ⏱️  Scene {scene_id}: {dur}s")
         else:
             timing_map[str(scene_id)] = {
-                "voice_path": None,
+                "voice_path"  : None,
                 "duration_sec": 5.0
             }
 
-    # Save karo
     with open("timing_map.json", "w", encoding="utf-8") as f:
         json.dump(timing_map, f, indent=2, ensure_ascii=False)
 
-    print(f"\n✅ Timing map saved!")
+    print("✅ Timing map saved!")
     return timing_map
 
 # ============================================================
@@ -276,58 +272,51 @@ def create_timing_map(voice_files):
 # ============================================================
 def main():
     print("\n" + "="*50)
-    print("🎙️  KOKORO TTS - FREE HINDI VOICE GENERATOR")
+    print("🎙️  KOKORO TTS - FREE HINDI VOICE")
     print("="*50 + "\n")
 
-    # Step 1: Install karo
+    # Install
     if not install_kokoro():
-        print("❌ Installation failed!")
         sys.exit(1)
 
-    # Step 2: Models download karo
-    print("\n📥 Checking Kokoro models...")
+    # Models download
+    print("\n📥 Checking models...")
     if not download_kokoro_models():
-        print("❌ Model download failed!")
         sys.exit(1)
 
-    # Step 3: Narrations nikalo
-    print("\n📝 Extracting narrations...")
+    # Narrations nikalo
+    print("\n📝 Extracting Hindi narrations...")
     narrations = extract_narrations()
 
     if not narrations:
-        print("❌ Koi narration nahi mila!")
+        print("❌ No narrations found!")
         sys.exit(1)
 
-    # Step 4: Har scene ke liye voice banao
-    print(f"\n🚀 Generating voices for {len(narrations)} scenes...\n")
+    # Voices banao
+    print(f"\n🚀 Generating {len(narrations)} voices...\n")
     voice_files = {}
 
     for scene_id, hindi_text in narrations.items():
         print(f"\n--- Scene {scene_id} ---")
-        print(f"📝 Text: {hindi_text[:80]}...")
+        print(f"📝 Hindi: {hindi_text[:70]}...")
 
-        voice_path = generate_voice_kokoro(
-            scene_id = scene_id,
-            text     = hindi_text
-        )
-
+        voice_path = generate_voice_kokoro(scene_id, hindi_text)
         voice_files[scene_id] = voice_path
         time.sleep(0.3)
 
-    # Step 5: Timing map banao
+    # Timing map
     print("\n⏱️  Creating timing map...")
-    timing_map = create_timing_map(voice_files)
+    create_timing_map(voice_files)
 
     # Summary
     success = sum(1 for v in voice_files.values() if v)
     failed  = len(voice_files) - success
 
     print("\n" + "="*50)
-    print(f"🎉 VOICE GENERATION COMPLETE!")
-    print(f"   ✅ Success : {success} scenes")
-    print(f"   ❌ Failed  : {failed} scenes")
-    print(f"   📁 Saved   : {VOICE_DIR}/")
-    print("="*50 + "\n")
+    print(f"🎉 DONE!")
+    print(f"   ✅ Success: {success}")
+    print(f"   ❌ Failed : {failed}")
+    print("="*50)
 
 if __name__ == "__main__":
     main()
