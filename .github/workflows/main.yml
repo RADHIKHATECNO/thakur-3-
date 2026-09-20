@@ -24,10 +24,10 @@ jobs:
     - name: Install Dependencies
       run: pip install openai requests mutagen
         
-    - name: Generate AI Prompts (gpt-6-astra)
+    - name: Generate AI Prompts (Cohere API)
       run: python auto_prompt.py
       env:
-        KIE_API_KEY: ${{ secrets.KIE_API_KEY }}
+        COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
 
     - name: Generate Voiceover (ElevenLabs)
       run: python generate_audio.py
