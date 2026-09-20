@@ -25,18 +25,23 @@ def setup_files():
         with open(STORY_FILE, "w", encoding="utf-8") as f:
             f.write("4 min | 3D Pixar Animation | Ek lalachi kauwa aur jadui paani ki kahani\n")
             
-def call_cohere_api(system_prompt, user_prompt, model_name):
-    url = "https://api.cohere.ai/v1/chat"
+def call_cohere_api_v2(system_prompt, user_prompt, model_name):
+    # 🔴 NAYA V2 ENDPOINT (Screenshot ke hisaab se)
+    url = "https://api.cohere.com/v2/chat"
     
     headers = {
         "Authorization": f"Bearer {API_KEY}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "Accept": "application/json"
     }
     
+    # 🔴 V2 Payload Format (ChatGPT jaisa)
     data = {
         "model": model_name,
-        "preamble": system_prompt,
-        "message": user_prompt,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
         "temperature": 0.7
     }
     
@@ -45,9 +50,14 @@ def call_cohere_api(system_prompt, user_prompt, model_name):
         
         if response.status_code == 200:
             res_json = response.json()
-            return res_json.get("text")
+            # V2 JSON structure se text nikalna
+            try:
+                return res_json["message"]["content"][0]["text"]
+            except KeyError:
+                print(f"⚠️ Unexpected JSON structure: {res_json}")
+                return None
         else:
-            print(f"⚠️ Cohere API Error with {model_name} ({response.status_code}): {response.text}")
+            print(f"⚠️ Cohere API V2 Error with {model_name} ({response.status_code}): {response.text}")
             return None
             
     except Exception as e:
@@ -84,13 +94,13 @@ def generate_ai_script(duration_str, style, topic, character_rules):
     
     START DIRECTLY WITH LINE 1. NO INTRO. NO OUTRO. EXACTLY {target_scenes} LINES."""
     
-    # Naye aur active Cohere models ki list
-    active_models = ["command-r-plus", "command", "command-light"]
+    # Screenhsot me dikhaya gaya exact naya model
+    active_models = ["command-r-plus-08-2024", "command-r-08-2024"]
     
     for model in active_models:
-        print(f"🔄 Trying model: {model}...")
-        for attempt in range(1, 3): # Har model ko 2 baar try karega
-            text = call_cohere_api(system_prompt, user_prompt, model)
+        print(f"🔄 Trying model: {model} (V2 API)...")
+        for attempt in range(1, 3): 
+            text = call_cohere_api_v2(system_prompt, user_prompt, model)
             
             if text:
                 valid_lines = [line.strip() for line in text.split('\n') if '|' in line and not line.startswith('|')]
@@ -98,7 +108,7 @@ def generate_ai_script(duration_str, style, topic, character_rules):
                     print(f"✅ Success! Generated {len(valid_lines)} micro-scenes/prompts using {model}.")
                     return "\n".join(valid_lines)
                 else:
-                    print(f"⚠️ Bad formatting. Retrying with {model}...")
+                    print(f"⚠️ Bad formatting. AI output snippet: {text[:100]}...")
             time.sleep(2)
             
     print("❌ Failed to generate script. All models failed.")
@@ -113,11 +123,11 @@ def generate_ai_metadata(topic):
     TAGS: [comma separated top 10 SEO tags]
     MUSIC: [10-word prompt for AI background music, e.g., 'epic sad cinematic emotional']"""
     
-    active_models = ["command-r-plus", "command", "command-light"]
+    active_models = ["command-r-plus-08-2024", "command-r-08-2024"]
     
     for model in active_models:
-        print(f"🎵 Generating Metadata using {model}...")
-        text = call_cohere_api("You are a YouTube SEO Expert.", prompt, model)
+        print(f"🎵 Generating Metadata using {model} (V2 API)...")
+        text = call_cohere_api_v2("You are a YouTube SEO Expert.", prompt, model)
         
         if text:
             try:
