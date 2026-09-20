@@ -26,7 +26,7 @@ def setup_files():
             f.write("4 min | 3D Pixar Animation | Ek lalachi kauwa aur jadui paani ki kahani\n")
             
 def call_cohere_api_v2(system_prompt, user_prompt, model_name):
-    # 🔴 NAYA V2 ENDPOINT (Screenshot ke hisaab se)
+    # V2 Endpoint
     url = "https://api.cohere.com/v2/chat"
     
     headers = {
@@ -35,7 +35,7 @@ def call_cohere_api_v2(system_prompt, user_prompt, model_name):
         "Accept": "application/json"
     }
     
-    # 🔴 V2 Payload Format (ChatGPT jaisa)
+    # V2 Payload Format
     data = {
         "model": model_name,
         "messages": [
@@ -50,7 +50,6 @@ def call_cohere_api_v2(system_prompt, user_prompt, model_name):
         
         if response.status_code == 200:
             res_json = response.json()
-            # V2 JSON structure se text nikalna
             try:
                 return res_json["message"]["content"][0]["text"]
             except KeyError:
@@ -94,8 +93,12 @@ def generate_ai_script(duration_str, style, topic, character_rules):
     
     START DIRECTLY WITH LINE 1. NO INTRO. NO OUTRO. EXACTLY {target_scenes} LINES."""
     
-    # Screenhsot me dikhaya gaya exact naya model
-    active_models = ["command-r-plus-08-2024", "command-r-08-2024"]
+    # 🔴 EXACT MODELS FROM YOUR SCREENSHOT 🔴
+    active_models = [
+        "command-a-plus-05-2026", 
+        "command-a-03-2025", 
+        "c4ai-aya-expanse-32b"
+    ]
     
     for model in active_models:
         print(f"🔄 Trying model: {model} (V2 API)...")
@@ -123,7 +126,7 @@ def generate_ai_metadata(topic):
     TAGS: [comma separated top 10 SEO tags]
     MUSIC: [10-word prompt for AI background music, e.g., 'epic sad cinematic emotional']"""
     
-    active_models = ["command-r-plus-08-2024", "command-r-08-2024"]
+    active_models = ["command-a-plus-05-2026", "command-a-03-2025", "c4ai-aya-expanse-32b"]
     
     for model in active_models:
         print(f"🎵 Generating Metadata using {model} (V2 API)...")
