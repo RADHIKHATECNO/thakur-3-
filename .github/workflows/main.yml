@@ -24,11 +24,11 @@ jobs:
     - name: Install Dependencies
       run: pip install openai requests mutagen
         
-    # YAHAN OPENROUTER + LIVE LOGS (-u) SET HAIN
-    - name: Generate AI Prompts (OpenRouter)
+    # YAHAN BAZAARLINK + LIVE LOGS (-u) SET HAIN
+    - name: Generate AI Prompts (BazaarLink Auto)
       run: python -u auto_prompt.py
       env:
-        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        BAZAAR_API_KEY: ${{ secrets.BAZAAR_API_KEY }}
 
     - name: Generate Voiceover (ElevenLabs)
       run: python -u generate_audio.py
