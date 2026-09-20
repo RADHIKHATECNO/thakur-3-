@@ -62,10 +62,6 @@ def get_live_free_models():
 # STORY PARSER
 # ============================================================
 def parse_story_line(line):
-    """
-    Format: short | 30sec | topic - comedy
-            long  | 10min | topic - comedy
-    """
     parts = [p.strip() for p in line.split("|")]
 
     if len(parts) < 3:
@@ -93,103 +89,73 @@ def parse_story_line(line):
 # ============================================================
 def calculate_scenes(video_type, duration_sec):
     if video_type == "short":
-        return max(3, math.ceil(duration_sec / 5))
+        return max(4, math.ceil(duration_sec / 5))
     else:
-        return max(10, math.ceil(duration_sec / 8))
+        return max(15, math.ceil(duration_sec / 8))
 
 # ============================================================
 # VISUAL STYLE DETECTOR
 # ============================================================
 def detect_visual_style(topic):
-    """
-    Topic se visual style detect karo
-    """
     topic_lower = topic.lower()
 
-    # Horror/Dark
     if any(w in topic_lower for w in [
-        "horror", "dark", "ghost", "bhoot",
-        "scary", "darr", "raat", "shaitan",
-        "zombie", "vampire", "haunted"
+        "animal", "janwar", "cat", "dog", "billi",
+        "kutta", "mouse", "bird", "chidiya", "rabbit"
     ]):
-        return "2D Anime dark cinematic style"
+        return "Tom and Jerry 2D cartoon animation style"
 
-    # Realistic Human / Comedy Human
     if any(w in topic_lower for w in [
-        "human", "insaan", "aadmi", "ladka",
-        "ladki", "realistic", "real", "banda",
-        "uncle", "aunty", "bhai", "dost"
+        "robot", "machine", "cyber", "future", "space"
     ]):
-        return "Pixar 3D animation style"
+        return "funny Pixar 3D cartoon robot style"
 
-    # Animal
     if any(w in topic_lower for w in [
-        "animal", "janwar", "dog", "cat",
-        "kutta", "billi", "tiger", "lion",
-        "elephant", "hathi", "monkey", "bandar"
+        "car", "gaadi", "truck", "bus", "vehicle"
     ]):
-        return "cute funny cartoon animal style"
+        return "funny Pixar 3D cartoon vehicle style"
 
-    # Robot/Sci-fi
-    if any(w in topic_lower for w in [
-        "robot", "sci-fi", "future", "space",
-        "alien", "machine", "cyber", "android"
-    ]):
-        return "futuristic 3D CGI cinematic style"
-
-    # Vehicle/Car
-    if any(w in topic_lower for w in [
-        "car", "gaadi", "truck", "bus",
-        "train", "bike", "vehicle", "auto"
-    ]):
-        return "Pixar 3D funny cartoon style"
-
-    # Default
-    return "Pixar 3D funny cartoon style"
+    # Default - Tom & Jerry like
+    return "Tom and Jerry 2D cartoon animation style"
 
 # ============================================================
 # CHARACTER GENERATOR
 # ============================================================
 def generate_character(topic, visual_style):
-    """
-    Topic se ek detailed consistent character banao
-    Jo poori video mein EXACTLY same rahe
-    """
     system = (
-        "You are a creative character designer for animated movies. "
-        "Create ONE very detailed character description. "
-        "Be extremely specific about every visual detail."
+        "You are a cartoon character designer like Tom and Jerry creators. "
+        "Create ONE very detailed funny cartoon character."
     )
 
     prompt = f"""Topic: '{topic}'
 Visual Style: {visual_style}
 
-Create ONE unique main character with EXTREMELY detailed appearance.
+Create ONE unique FUNNY cartoon character like Tom & Jerry style.
 
-Include ALL of these:
-1. Exact funny Hindi name
-2. Body type (fat/thin/tall/short)
-3. Skin color
-4. Hair (color, style, length)
-5. Eyes (color, size, expression)
-6. Clothing (exact colors, patterns, style)
-7. Accessories (glasses, hat, jewelry etc)
-8. One signature funny prop or feature
-9. Default facial expression
-10. One funny personality trait
+Include ALL details:
+1. Funny name
+2. Animal/creature type
+3. Body (fat/thin/round/tall)
+4. Color (exact colors)
+5. Eyes (big/small/round/googly)
+6. Clothing if any (exact colors)
+7. Signature funny prop
+8. Default expression
+9. Funny running/moving style
+10. Funny personality
 
-Format EXACTLY like this:
-NAME | [full appearance in English - all details] | [funny trait]
+Format EXACTLY:
+NAME | [full detailed appearance in English] | [funny comedy trait]
 
 Example:
-Motu Singh | fat funny indian woman, wheatish skin, black hair tied in bun with red flowers, big round googly eyes, chubby red cheeks, wearing bright orange saree with golden border and green blouse, red bindi on forehead, gold bangles on both wrists, always carrying a tiffin box, default angry-but-funny expression | always stuck in traffic and argues with everyone
+Motu Cat | fat round orange tabby cat, huge googly yellow eyes, tiny pink nose, always wearing blue bow tie, stubby little legs, fluffy striped tail, default shocked wide-eye expression, runs in fast spinning legs cartoon style | thinks he is smartest but always fails hilariously
 
-ONE LINE ONLY - Be very detailed:"""
+ONE LINE - Very detailed:"""
 
     models = get_live_free_models()
     for model in models[:4]:
         try:
-            print(f"👤 Character generation - Model: {model}")
+            print(f"👤 Character - Model: {model}")
             response = client.chat.completions.create(
                 model=model,
                 messages=[
@@ -199,120 +165,121 @@ ONE LINE ONLY - Be very detailed:"""
                 temperature=0.9
             )
             char = response.choices[0].message.content.strip()
-
-            # Pehli line lo
             char = char.split('\n')[0].strip()
             char = re.sub(r'^[\d\.\-\*\s]+', '', char)
 
-            # Validate - minimum 3 parts aur detailed honi chahiye
             if '|' in char and len(char) > 100:
-                print(f"✅ Character Created!")
-                print(f"   {char[:100]}...")
+                print(f"✅ Character: {char[:100]}...")
                 return char
             else:
-                print(f"⚠️ Character too short, retrying...")
+                print(f"⚠️ Too short, retrying...")
 
         except Exception as e:
-            print(f"⚠️ Model {model} failed: {e}")
+            print(f"⚠️ Failed: {e}")
             time.sleep(1)
 
-    # Detailed Fallback character
+    # Detailed fallback
     return (
-        "Raju Sharma | small chubby funny indian man, "
-        "wheatish skin, black messy hair always uncombed, "
-        "big surprised round eyes, thick black mustache, "
-        "wearing bright yellow kurta with white pajama, "
-        "red rubber slippers, always holding a chai cup, "
-        "default shocked expression with open mouth | "
-        "always does everything wrong but thinks he is genius"
+        "Raju Mouse | tiny chubby grey mouse, "
+        "huge round black eyes, pink tiny nose, "
+        "wearing red oversized hat and yellow polka dot shorts, "
+        "white gloves, stubby tail, "
+        "default mischievous grin expression, "
+        "runs with fast spinning cartoon legs | "
+        "always steals food but gets caught in funny ways"
     )
 
 # ============================================================
-# FULL SCRIPT GENERATOR
+# TOM & JERRY SCRIPT GENERATOR
 # ============================================================
-def generate_full_script(
-    video_type, duration_sec, topic,
-    character, scene_count
+def generate_tom_jerry_script(
+    video_type, duration_sec,
+    topic, character, scene_count
 ):
     """
-    Har scene ke liye 3 parts banao:
-    NARRATION >> IMAGE_PROMPT >> VIDEO_PROMPT
+    Tom & Jerry style:
+    - No dialogue
+    - Pure visual comedy
+    - Exaggerated expressions
+    - Sound effects only
+    - Funny actions
     """
-
-    # Character parts nikalo
     char_parts = character.split("|")
-    char_name  = char_parts[0].strip() if len(char_parts) > 0 else "Raju"
-    char_looks = char_parts[1].strip() if len(char_parts) > 1 else "funny cartoon man"
-    char_trait = char_parts[2].strip() if len(char_parts) > 2 else "always funny"
+    char_name  = char_parts[0].strip()
+    char_looks = char_parts[1].strip() if len(char_parts) > 1 else ""
+    char_trait = char_parts[2].strip() if len(char_parts) > 2 else ""
 
     visual_style = detect_visual_style(topic)
 
-    # Aspect ratio
     if video_type == "short":
-        aspect      = "vertical 9:16 composition"
-        image_style = f"{visual_style}, {aspect}"
+        aspect = "vertical 9:16 composition"
     else:
-        aspect      = "horizontal 16:9 widescreen"
-        image_style = f"{visual_style}, {aspect}"
+        aspect = "horizontal 16:9 widescreen"
 
-    # Full character description for image prompt
-    full_char_desc = (
-        f"{visual_style}, "
-        f"{char_looks}, "
-        f"named {char_name}"
-    )
+    full_char = f"{visual_style}, {char_looks}, named {char_name}"
 
-    system = """You are a master Hindi storyteller and YouTube expert.
-You create PERFECTLY formatted scripts.
-Output ONLY scene lines. No extra text. No numbering. No explanation."""
+    system = """You are a Tom & Jerry cartoon director.
+You create PURE VISUAL COMEDY scenes.
+NO dialogue. NO narration. ONLY actions and sound effects.
+Output ONLY scene lines. Nothing else."""
 
     prompt = f"""Topic: '{topic}'
 Character: {char_name}
-Full Character Appearance: {char_looks}
-Character Trait: {char_trait}
-Visual Style: {visual_style}
-Aspect Ratio: {aspect}
+Appearance: {char_looks}
+Trait: {char_trait}
+Style: {visual_style}
 Total Scenes: {scene_count}
-Mood: 100% FUNNY, HAPPY, ENERGETIC - Zero horror, zero sadness
+Mood: 100% FUNNY COMEDY - Like Tom & Jerry
 
-🎯 YOUR JOB: Create EXACTLY {scene_count} scenes.
+Create EXACTLY {scene_count} scenes.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📌 FORMAT (use >> to separate):
-[Hindi narration] >> [Full image prompt] >> [Video + SFX prompt]
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🎯 TOM & JERRY RULES:
+- NO dialogue, NO voice, NO narration
+- PURE visual comedy like cartoons
+- Exaggerated expressions (eyes pop out, jaw drops, steam from ears)
+- Funny physics (spinning legs, flat after rolling, stars after hit)
+- Classic cartoon SFX (BOING! CRASH! WHOOSH! SPLAT! BONK!)
+- Each scene = one funny action/reaction
+- Building story - each scene connects to next
+- Happy funny ending
 
-🔴 HINDI NARRATION RULES:
-- Energetic, funny, use "अरे!", "वाह!", "ओहो!", "हाहा!"
-- Exactly describe what is happening on screen
-- Max 20 words per scene
-- Pure Hindi only
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FORMAT (use >> separator):
+[Image prompt] >> [Video motion prompt] >> [Sound effects list]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-🔴 IMAGE PROMPT RULES (CRITICAL):
-- ALWAYS start with: "{full_char_desc}"
-- Then add: [EXACT ACTION in this scene]
-- Then add: [BACKGROUND details]
-- Then add: {aspect}, bright vivid colors, expressive funny face, high quality render, no text, no watermark
+🔴 IMAGE PROMPT RULES:
+- Start with: "{full_char}"
+- Add exact funny action
+- Add exaggerated cartoon expression
+- Add colorful background
+- End with: {aspect}, bright vivid colors, high quality cartoon render, no text, no watermark
 - MINIMUM 80 words
-- NEVER shorten character description
 
 🔴 VIDEO PROMPT RULES:
-- Camera movement (zoom/pan/shake)
-- Sound effects (SFX only)
-- End with: no bgm, no voice
+- Camera movement (zoom/shake/pan)
+- Character motion description
+- Cartoon physics description
 - Max 30 words
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📌 PERFECT EXAMPLE:
-अरे! {char_name} ट्रैफिक में फंस गई! >> {visual_style}, {char_looks}, named {char_name}, stuck in massive traffic jam with hundreds of colorful cars honking, both hands pressing horn on steering wheel, steam coming from ears, angry red face, busy indian street background with shops and signs, {aspect}, bright vivid colors, expressive funny face, high quality render, no text, no watermark >> Fast zoom in on angry face, camera shake, SFX: loud traffic horns, engine rumbles, city crowd noise, no bgm, no voice
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔴 SOUND EFFECTS RULES:
+- List 3-5 specific cartoon SFX
+- Classic sounds: BOING, CRASH, WHOOSH, SPLAT, BONK, WHISTLE, SPRING, POP
+- Timing description
+- End with: upbeat cartoon bgm
+- NO voice, NO dialogue
 
-🎬 STORY STRUCTURE:
-- Scene 1: SUPER HOOK - most shocking/funny moment
-- Scenes 2 to {scene_count-1}: Story action/comedy
-- Scene {scene_count}: Happy ending/resolution
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PERFECT EXAMPLE:
+{full_char}, running at lightning speed with spinning cartoon legs, eyes wide with panic, tongue hanging out, chasing a giant rolling cheese wheel down a colorful hill, dust cloud behind, {aspect}, bright vivid colors, high quality cartoon render, no text, no watermark >> Fast tracking shot following character, legs spinning blur, dust cloud growing, zoom out to show giant cheese, cartoon speed lines >> WHOOSH fast run, BOING spring legs, RUMBLE rolling cheese, CRASH at bottom, upbeat cartoon bgm
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-START DIRECTLY WITH SCENE 1 (no intro text):"""
+STORY STRUCTURE:
+Scene 1: SUPER HOOK - Most shocking funny moment
+Scene 2 to {scene_count-1}: Comedy escalates
+Scene {scene_count}: Funny happy resolution
+
+START WITH SCENE 1:"""
 
     models    = get_live_free_models()
     max_tries = 10
@@ -321,7 +288,7 @@ START DIRECTLY WITH SCENE 1 (no intro text):"""
         if attempt > max_tries:
             break
         for retry in range(2):
-            print(f"🔄 Script Attempt {attempt} - Model: {model}")
+            print(f"🔄 Script Attempt {attempt} - {model}")
             try:
                 response = client.chat.completions.create(
                     model=model,
@@ -329,21 +296,18 @@ START DIRECTLY WITH SCENE 1 (no intro text):"""
                         {"role": "system", "content": system},
                         {"role": "user", "content": prompt}
                     ],
-                    temperature=0.85,
+                    temperature=0.9,
                     max_tokens=4000
                 )
                 text = response.choices[0].message.content.strip()
 
-                print("\n--- RAW OUTPUT (first 600 chars) ---")
-                print(text[:600])
-                print("-------------------------------------\n")
+                print("\n--- RAW (500 chars) ---")
+                print(text[:500])
+                print("-----------------------\n")
 
-                # Valid lines filter
                 valid = []
                 for line in text.split('\n'):
                     line = line.strip()
-
-                    # Clean karo
                     line = re.sub(r'^[\d\.\-\*\#\s]+', '', line)
 
                     if '>>' not in line:
@@ -353,51 +317,45 @@ START DIRECTLY WITH SCENE 1 (no intro text):"""
                     if len(parts) < 3:
                         continue
 
-                    narration  = parts[0].strip()
-                    img_prompt = parts[1].strip()
-                    vid_prompt = parts[2].strip()
+                    img_prompt = parts[0].strip()
+                    vid_prompt = parts[1].strip()
+                    sfx_prompt = parts[2].strip()
 
-                    # Validations
-                    if len(narration) < 5:
-                        print(f"⚠️ Narration too short: {narration}")
-                        continue
-
+                    # Validate
                     if len(img_prompt) < 80:
-                        print(f"⚠️ Image prompt too short ({len(img_prompt)} chars): {img_prompt[:50]}")
+                        print(f"⚠️ Image too short: {len(img_prompt)}")
                         continue
 
                     if len(vid_prompt) < 10:
-                        print(f"⚠️ Video prompt too short")
+                        print(f"⚠️ Video too short")
                         continue
 
-                    # Character consistency check
-                    char_first_word = char_looks.split(",")[0].strip().lower()
-                    if char_first_word not in img_prompt.lower():
-                        print(f"⚠️ Character missing from image prompt! Adding...")
-                        # Auto fix - character add karo
-                        img_prompt = (
-                            f"{full_char_desc}, "
-                            f"{img_prompt}"
-                        )
+                    if len(sfx_prompt) < 10:
+                        print(f"⚠️ SFX too short")
+                        continue
 
-                    # Reconstruct line
-                    fixed_line = (
-                        f"{narration} >> "
+                    # Character check
+                    char_word = char_looks.split(",")[0].lower()
+                    if char_word not in img_prompt.lower():
+                        img_prompt = f"{full_char}, {img_prompt}"
+
+                    fixed = (
                         f"{img_prompt} >> "
-                        f"{vid_prompt}"
+                        f"{vid_prompt} >> "
+                        f"{sfx_prompt}"
                     )
-                    valid.append(fixed_line)
+                    valid.append(fixed)
                     print(f"✅ Scene {len(valid)} valid!")
 
                 if len(valid) >= scene_count * 0.7:
-                    print(f"\n✅ {len(valid)} valid scenes generated!")
+                    print(f"✅ {len(valid)} scenes ready!")
                     return valid[:scene_count]
                 else:
-                    print(f"⚠️ Only {len(valid)}/{scene_count} valid. Retrying...")
+                    print(f"⚠️ Only {len(valid)}. Retrying...")
                     time.sleep(2)
 
             except Exception as e:
-                print(f"⚠️ Model {model} failed: {e}")
+                print(f"⚠️ Failed: {e}")
                 time.sleep(2)
 
     return None
@@ -406,38 +364,33 @@ START DIRECTLY WITH SCENE 1 (no intro text):"""
 # METADATA GENERATOR
 # ============================================================
 def generate_viral_metadata(video_type, topic, character):
-    system = (
-        "You are a YouTube viral growth expert. "
-        "Create metadata that gets maximum clicks."
-    )
+    system = "You are a YouTube viral expert for cartoon comedy channels."
 
     char_name = character.split("|")[0].strip()
 
     if video_type == "short":
-        format_hint = "YouTube Shorts 9:16 vertical"
-        title_note  = "Short punchy Hindi title with emoji, max 60 chars, add #shorts"
+        format_hint = "YouTube Shorts 9:16"
+        title_note  = "Funny Hindi title with emoji, max 60 chars, add #shorts"
     else:
-        format_hint = "YouTube Long Video 16:9 horizontal"
-        title_note  = "Engaging Hindi title with keywords, max 70 chars"
+        format_hint = "YouTube Long Video 16:9"
+        title_note  = "Funny engaging title, max 70 chars"
 
     prompt = f"""Topic: '{topic}'
-Main Character: {char_name}
+Character: {char_name}
+Style: Tom & Jerry cartoon comedy
 Format: {format_hint}
-Mood: Funny, Happy, Family-Friendly, Comedy
 
-Create VIRAL YouTube metadata:
-
+Create VIRAL metadata:
 TITLE: [{title_note}]
-DESC: [3 funny engaging lines in Hindi + subscribe CTA]
-TAGS: [15 viral Hindi comedy tags comma separated]
-MUSIC: [5-7 word upbeat funny background music style]"""
+DESC: [2-3 funny lines about cartoon comedy + subscribe CTA]
+TAGS: [15 viral cartoon comedy tags]
+MUSIC: [funny upbeat cartoon bgm style - 5 words]"""
 
     models        = get_live_free_models()
-    default_music = "upbeat funny cartoon comedy background music"
+    default_music = "funny upbeat Tom Jerry cartoon"
 
-    for model in models[:5]:
+    for model in models[:4]:
         try:
-            print(f"📊 Metadata - Model: {model}")
             response = client.chat.completions.create(
                 model=model,
                 messages=[
@@ -460,37 +413,34 @@ MUSIC: [5-7 word upbeat funny background music style]"""
                 r"TAGS:\s*(.*)", text
             ).group(1).strip()
 
-            music_match = re.search(r"MUSIC:\s*(.*)", text)
-            music = music_match.group(1).strip() if music_match else default_music
+            music = re.search(
+                r"MUSIC:\s*(.*)", text
+            )
+            music = music.group(1).strip() if music else default_music
 
             with open(MUSIC_FILE, "w", encoding="utf-8") as f:
                 f.write(music)
 
-            print(f"✅ Metadata generated!")
-            print(f"   Title: {title}")
+            print(f"✅ Metadata: {title}")
             return title, desc, tags
 
         except Exception as e:
-            print(f"⚠️ Metadata model {model} failed: {e}")
+            print(f"⚠️ Failed: {e}")
             time.sleep(1)
 
-    # Fallback
     with open(MUSIC_FILE, "w", encoding="utf-8") as f:
         f.write(default_music)
 
     return (
-        f"😂 {topic[:40]} - Funny Story! #shorts",
-        "Ek mazedaar kahani! Subscribe karo! 🔔",
-        "funny, comedy, hindi, shorts, viral, trending"
+        f"😂 {char_name} Ki Masti! #shorts",
+        "Dekhो cartoon ki mazedaar duniya! Subscribe karo! 🔔",
+        "cartoon, funny, comedy, shorts, viral, animation"
     )
 
 # ============================================================
-# PROMPTS SAVER + VALIDATOR
+# SAVE PROMPTS
 # ============================================================
-def save_and_validate_prompts(script_lines, character):
-    """
-    prompts.txt save karo aur validate karo
-    """
+def save_prompts(script_lines, character):
     char_parts = character.split("|")
     char_name  = char_parts[0].strip()
     char_looks = char_parts[1].strip() if len(char_parts) > 1 else ""
@@ -505,35 +455,34 @@ def save_and_validate_prompts(script_lines, character):
         if len(parts) < 3:
             continue
 
-        narration  = parts[0].strip()
-        img_prompt = parts[1].strip()
-        vid_prompt = parts[2].strip()
+        img_prompt = parts[0].strip()
+        vid_prompt = parts[1].strip()
+        sfx_prompt = parts[2].strip()
 
-        # Final character consistency fix
-        char_first = char_looks.split(",")[0].strip().lower()
-        if char_first not in img_prompt.lower():
+        # Character fix
+        char_word = char_looks.split(",")[0].lower()
+        if char_word not in img_prompt.lower():
             img_prompt = f"{full_char}, {img_prompt}"
 
-        final_line = f"{narration} >> {img_prompt} >> {vid_prompt}"
-        validated.append(final_line)
+        final = f"{img_prompt} >> {vid_prompt} >> {sfx_prompt}"
+        validated.append(final)
 
         print(f"\n✅ Scene {idx}:")
-        print(f"   🎙️  NAR: {narration[:60]}...")
-        print(f"   🎨 IMG: {img_prompt[:80]}...")
+        print(f"   🎨 IMG: {img_prompt[:70]}...")
         print(f"   🎬 VID: {vid_prompt[:50]}...")
+        print(f"   🔊 SFX: {sfx_prompt[:50]}...")
 
     with open(PROMPT_FILE, "w", encoding="utf-8") as f:
         for line in validated:
             f.write(line + "\n")
 
-    print(f"\n✅ {len(validated)} scenes saved to prompts.txt!")
+    print(f"\n✅ {len(validated)} scenes saved!")
     return validated
 
 # ============================================================
 # MAIN
 # ============================================================
 def process_stories():
-    # Story file check
     if not os.path.exists(STORY_FILE):
         print(f"❌ {STORY_FILE} not found!")
         sys.exit(1)
@@ -549,41 +498,39 @@ def process_stories():
     current = topics[0]
 
     print(f"\n{'='*55}")
-    print(f"📖 Processing: {current}")
+    print(f"📖 Topic: {current}")
     print(f"{'='*55}\n")
 
-    # Parse
     video_type, duration_sec, topic = parse_story_line(current)
     scene_count  = calculate_scenes(video_type, duration_sec)
     visual_style = detect_visual_style(topic)
 
-    print(f"📺 Type         : {video_type.upper()}")
-    print(f"⏱️  Duration     : {duration_sec}s")
-    print(f"🎬 Scenes       : {scene_count}")
-    print(f"🎨 Visual Style : {visual_style}")
-    print(f"📝 Topic        : {topic}\n")
+    print(f"📺 Type   : {video_type.upper()}")
+    print(f"⏱️  Time   : {duration_sec}s")
+    print(f"🎬 Scenes : {scene_count}")
+    print(f"🎨 Style  : {visual_style}")
+    print(f"📝 Topic  : {topic}\n")
 
-    # Step 1: Character banao
-    print("👤 Creating detailed character...")
+    # Character
+    print("👤 Creating character...")
     character = generate_character(topic, visual_style)
-    print(f"\n✅ Character: {character[:120]}...\n")
 
-    # Step 2: Full script banao
-    print("📝 Generating full script...")
-    script_lines = generate_full_script(
+    # Script
+    print("\n🎬 Generating Tom & Jerry script...")
+    script_lines = generate_tom_jerry_script(
         video_type, duration_sec,
         topic, character, scene_count
     )
 
     if not script_lines:
-        print("❌ Script generation failed after all attempts!")
+        print("❌ Script failed!")
         sys.exit(1)
 
-    # Step 3: Save + validate
-    print("\n💾 Saving and validating prompts...")
-    validated = save_and_validate_prompts(script_lines, character)
+    # Save
+    print("\n💾 Saving prompts...")
+    validated = save_prompts(script_lines, character)
 
-    # Step 4: Config save
+    # Config
     config = {
         "video_type"   : video_type,
         "duration_sec" : duration_sec,
@@ -591,16 +538,15 @@ def process_stories():
         "character"    : character,
         "visual_style" : visual_style,
         "scene_count"  : len(validated),
-        "aspect_ratio" : "9:16" if video_type == "short" else "16:9"
+        "aspect_ratio" : "9:16" if video_type == "short" else "16:9",
+        "style"        : "tom_and_jerry"
     }
 
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2, ensure_ascii=False)
 
-    print(f"✅ Config saved!")
-
-    # Step 5: Metadata
-    print("\n🚀 Generating viral metadata...")
+    # Metadata
+    print("\n🚀 Generating metadata...")
     title, desc, tags = generate_viral_metadata(
         video_type, topic, character
     )
@@ -611,24 +557,20 @@ def process_stories():
         f.write(f"TAGS: {tags}\n")
         f.write(f"VIDEO_TYPE: {video_type}\n")
 
-    # Summary
     print(f"\n{'='*55}")
-    print(f"🎉 STAGE 1 COMPLETE!")
-    print(f"   📺 Title     : {title}")
-    print(f"   👤 Character : {character.split('|')[0].strip()}")
-    print(f"   🎬 Scenes    : {len(validated)}")
-    print(f"   🎨 Style     : {visual_style}")
+    print(f"🎉 DONE!")
+    print(f"   🎬 Title    : {title}")
+    print(f"   👤 Character: {character.split('|')[0].strip()}")
+    print(f"   🎨 Scenes   : {len(validated)}")
     print(f"{'='*55}\n")
 
-    # Used story hatao
+    # Remove used story
     remaining = topics[1:]
     with open(STORY_FILE, "w", encoding="utf-8") as f:
         f.write(
             "\n".join(remaining) + "\n"
             if remaining else ""
         )
-
-    print("🚀 Pipeline Stage 1 Complete!")
 
 if __name__ == "__main__":
     process_stories()
