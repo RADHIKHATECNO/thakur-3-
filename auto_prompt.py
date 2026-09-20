@@ -4,20 +4,17 @@ import re
 import math
 import time
 import requests
-import json
 
 STORY_FILE = "story.txt"
 CHARACTER_FILE = "character.txt"
 PROMPT_FILE = "prompts.txt"
 METADATA_FILE = "metadata.txt"
 
-API_KEY = os.getenv("KIE_API_KEY")
+# GitHub Secrets se Cohere API Key lena
+API_KEY = os.getenv("COHERE_API_KEY")
 if not API_KEY:
-    print("❌ ERROR: KIE_API_KEY is missing in GitHub Secrets!")
+    print("❌ ERROR: COHERE_API_KEY is missing in GitHub Secrets!")
     sys.exit(1)
-
-API_URL = "https://api.kie.ai/codex/v1/responses"
-MODEL_NAME = "gpt-6-astra"
 
 def setup_files():
     if not os.path.exists(CHARACTER_FILE):
@@ -28,76 +25,29 @@ def setup_files():
         with open(STORY_FILE, "w", encoding="utf-8") as f:
             f.write("4 min | 3D Pixar Animation | Ek lalachi kauwa aur jadui paani ki kahani\n")
             
-def call_kie_api(system_prompt, user_prompt):
+def call_cohere_api(system_prompt, user_prompt):
+    url = "https://api.cohere.ai/v1/chat"
+    
     headers = {
         "Authorization": f"Bearer {API_KEY}",
-        "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0"
+        "Content-Type": "application/json"
     }
     
-    full_prompt = f"{system_prompt}\n\n{user_prompt}"
-    
     data = {
-        "model": MODEL_NAME,
-        "input": [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "input_text",
-                        "text": full_prompt
-                    }
-                ]
-            }
-        ],
-        "reasoning": {
-            "effort": "low"
-        }
+        "model": "command-r",  # Cohere ka best storytelling model
+        "preamble": system_prompt, # Cohere me System Prompt ko Preamble bolte hain
+        "message": user_prompt,
+        "temperature": 0.7
     }
     
     try:
-        # Stream=True allows us to read chunk by chunk just like ChatGPT types it
-        response = requests.post(API_URL, headers=headers, json=data, stream=True, timeout=120)
+        response = requests.post(url, headers=headers, json=data, timeout=60)
         
-        if response.status_code != 200:
-            print(f"⚠️ KIE API Error ({response.status_code}): {response.text}")
-            return None
-            
-        collected_text = ""
-        
-        for line in response.iter_lines():
-            if line:
-                decoded = line.decode('utf-8')
-                if decoded.startswith("data: "):
-                    data_str = decoded[6:].strip()
-                    if not data_str or data_str == "[DONE]":
-                        continue
-                        
-                    try:
-                        chunk = json.loads(data_str)
-                        
-                        # Type 1: Final Completed Object
-                        if chunk.get("type") == "response.done":
-                            outputs = chunk.get("response", {}).get("output", [])
-                            for item in outputs:
-                                if item.get("type") == "message":
-                                    for content in item.get("content", []):
-                                        if content.get("type") == "output_text":
-                                            return content.get("text")
-                        
-                        # Type 2: Streaming Deltas (If final object is missing)
-                        if chunk.get("type") == "response.text.delta":
-                            collected_text += chunk.get("delta", "")
-                        elif "delta" in chunk and isinstance(chunk["delta"], dict) and "text" in chunk["delta"]:
-                            collected_text += chunk["delta"]["text"]
-                            
-                    except Exception:
-                        pass
-        
-        if collected_text:
-            return collected_text
+        if response.status_code == 200:
+            res_json = response.json()
+            return res_json.get("text")
         else:
-            print("⚠️ Stream completed but no text found.")
+            print(f"⚠️ Cohere API Error ({response.status_code}): {response.text}")
             return None
             
     except Exception as e:
@@ -112,7 +62,7 @@ def generate_ai_script(duration_str, style, topic, character_rules):
         
     target_scenes = max(5, math.ceil((minutes * 60) / 3.5))
 
-    system_prompt = "You are an Elite YouTube Scriptwriter and Master Storyboard Artist. You MUST follow instructions strictly."
+    system_prompt = "You are an Elite YouTube Scriptwriter and Master Storyboard Artist. You MUST follow instructions strictly and output exactly what is asked."
     
     user_prompt = f"""Task: Write a highly engaging, emotional, and dramatic LONG-FORM YouTube story video.
     Topic: "{topic}"
@@ -137,8 +87,8 @@ def generate_ai_script(duration_str, style, topic, character_rules):
     max_attempts = 3 
     
     for attempt in range(1, max_attempts + 1):
-        print(f"🔄 Attempt {attempt}: Generating Story with KIE API ({MODEL_NAME})...")
-        text = call_kie_api(system_prompt, user_prompt)
+        print(f"🔄 Attempt {attempt}: Generating Story with Cohere API (command-r)...")
+        text = call_cohere_api(system_prompt, user_prompt)
         
         if text:
             valid_lines = [line.strip() for line in text.split('\n') if '|' in line and not line.startswith('|')]
@@ -146,7 +96,7 @@ def generate_ai_script(duration_str, style, topic, character_rules):
                 print(f"✅ Success! Generated {len(valid_lines)} micro-scenes/prompts.")
                 return "\n".join(valid_lines)
             else:
-                print(f"⚠️ AI output format mismatch. Retrying!")
+                print(f"⚠️ AI did not follow format. Snippet: {text[:100]}... Retrying!")
         time.sleep(3)
             
     print("❌ Failed to generate script after 3 attempts.")
@@ -161,8 +111,8 @@ def generate_ai_metadata(topic):
     TAGS: [comma separated top 10 SEO tags]
     MUSIC: [10-word prompt for AI background music, e.g., 'epic sad cinematic emotional']"""
     
-    print(f"🎵 Generating Metadata using {MODEL_NAME}...")
-    text = call_kie_api("You are a YouTube SEO Expert.", prompt)
+    print(f"🎵 Generating Metadata using Cohere...")
+    text = call_cohere_api("You are a YouTube SEO Expert. Only output the requested format.", prompt)
     
     if text:
         try:
