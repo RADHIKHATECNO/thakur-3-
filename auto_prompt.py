@@ -74,22 +74,27 @@ def get_best_live_free_models():
                 try: p_comp = float(pricing.get("completion", 1))
                 except: p_comp = 1
                 
+                # Ignore agentic/coding models that cause errors
+                if "thinkingmachines" in m_id.lower() or "lyria" in m_id.lower():
+                    continue
+                
                 if m_id.endswith(":free") or (p_prompt == 0.0 and p_comp == 0.0):
                     ctx_len = m.get("context_length", 0)
                     score = ctx_len
                     
-                    # 💡 Rating System: Add bonus score for world-class storytellers
+                    # 💡 Rating System: Bonus points for best storytellers
                     lower_id = m_id.lower()
-                    if "gemini" in lower_id: score += 1000000
-                    elif "llama-3" in lower_id or "70b" in lower_id: score += 900000
+                    if "gemini-2.0" in lower_id: score += 2000000
+                    elif "gemini" in lower_id: score += 1000000
+                    elif "llama-3.3" in lower_id or "70b" in lower_id: score += 900000
                     elif "qwen" in lower_id and "72b" in lower_id: score += 800000
-                    elif "gemma" in lower_id or "mistral" in lower_id: score += 500000
+                    elif "gemma" in lower_id: score += 500000
                     
                     free_models.append({"id": m_id, "score": score})
             
             # Sort by highest score (Most powerful model first)
             free_models.sort(key=lambda x: x["score"], reverse=True)
-            top_models = [m["id"] for m in free_models[:10]] # Pick Top 10
+            top_models = [m["id"] for m in free_models[:10]] 
             
             if top_models:
                 print(f"🌟 Found {len(top_models)} active Free Models! Top pick: {top_models[0]}")
@@ -97,13 +102,12 @@ def get_best_live_free_models():
     except Exception as e:
         print(f"⚠️ Live scan failed: {e}")
         
-    # Fallback list just in case OpenRouter's scanner API is down
     print("⚠️ Using Fallback Free Models.")
     return [
-        "google/gemini-2.0-flash-exp:free",
-        "mistralai/mistral-7b-instruct:free",
-        "openchat/openchat-7b:free",
-        "qwen/qwen-vl-plus:free"
+        "google/gemini-2.0-flash-lite-preview-02-05:free",
+        "google/gemini-2.0-pro-exp-02-05:free",
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "mistralai/mistral-7b-instruct:free"
     ]
 
 def generate_ai_script(duration_str, style, topic, character_rules):
@@ -139,7 +143,6 @@ def generate_ai_script(duration_str, style, topic, character_rules):
     
     START DIRECTLY WITH THE FIRST LINE. NO INTRO. NO OUTRO."""
     
-    # AI dynamically best free models nikal raha hai
     models = get_best_live_free_models()
     
     for model in models:
@@ -150,9 +153,11 @@ def generate_ai_script(duration_str, style, topic, character_rules):
             if text:
                 valid_lines = []
                 for line in text.split('\n'):
-                    if '|' in line and not line.startswith('|'):
+                    if '|' in line and not line.startswith('|') and not line.startswith('**'):
+                        # Regex se 1. 2. 3. numbers pakke taur par hat jayenge
                         clean_line = re.sub(r'^[\d\.\-\*\s]+', '', line.strip())
-                        valid_lines.append(clean_line)
+                        if len(clean_line) > 10:
+                            valid_lines.append(clean_line)
                         
                 if len(valid_lines) >= 5:
                     print(f"✅ Success! Generated {len(valid_lines)} micro-scenes using {model}.")
@@ -175,6 +180,11 @@ def generate_ai_metadata(topic):
                 desc = re.search(r"DESC:\s*([\s\S]*?)TAGS:", text).group(1).strip()
                 tags = re.search(r"TAGS:\s*(.*)", text).group(1).strip()
                 music = re.search(r"MUSIC:\s*(.*)", text).group(1).strip()
+                
+                title = title.replace('*', '')
+                tags = tags.replace('*', '')
+                music = music.replace('*', '')
+                
                 with open("music_prompt.txt", "w", encoding="utf-8") as f: f.write(music)
                 return title, desc, tags
             except Exception:
