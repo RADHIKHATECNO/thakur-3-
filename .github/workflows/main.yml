@@ -2,16 +2,16 @@ name: Advanced Cinematic AI Pipeline
 
 on:
   schedule:
-    - cron: '30 00 * * *'   # Roz Subah 6:00 AM IST
-    - cron: '30 12 * * *'   # Roz Shaam 6:00 PM IST
-  workflow_dispatch:          # Manual run
+    - cron: '30 00 * * *'
+    - cron: '30 12 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   # ============================================================
-  # STAGE 1: AI SCRIPT + VOICE GENERATION
+  # STAGE 1: SCRIPT ONLY (No Voice!)
   # ============================================================
   stage1-script:
     runs-on: ubuntu-latest
@@ -22,29 +22,15 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: Install Script Dependencies
-      run: |
-        pip install openai requests
+    - name: Install Dependencies
+      run: pip install openai requests
 
-    - name: Generate AI Script + Metadata
+    - name: Generate Tom & Jerry Script
       run: python auto_prompt.py
       env:
         OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 
-    - name: Install Kokoro TTS Dependencies
-      run: |
-        sudo apt-get update && sudo apt-get install -y ffmpeg
-        pip install \
-          kokoro-onnx \
-          soundfile \
-          numpy \
-          indic-transliteration \
-          requests
-
-    - name: Generate Hindi Voice (Kokoro TTS - FREE)
-      run: python generate_voice.py
-
-    - name: Commit Updated Files
+    - name: Commit Files
       run: |
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -53,12 +39,11 @@ jobs:
           prompts.txt \
           metadata.txt \
           music_prompt.txt \
-          video_config.json \
-          timing_map.json || true
-        git commit -m "Auto: Script + Voice generated" || echo "No changes"
+          video_config.json || true
+        git commit -m "Auto: Tom & Jerry Script" || echo "No changes"
         git push
 
-    - name: Upload Stage 1 Artifacts
+    - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
         name: stage1-files
@@ -67,30 +52,22 @@ jobs:
           metadata.txt
           music_prompt.txt
           video_config.json
-          timing_map.json
-          scene_voices/
-          kokoro-v0_19.onnx
-          voices.bin
 
     - id: set-matrix
       run: |
         count=$(grep -c '^' prompts.txt || echo 0)
-        if [ "$count" -eq 0 ]; then
-          echo "❌ prompts.txt empty!"
-          exit 1
-        fi
+        if [ "$count" -eq 0 ]; then exit 1; fi
         matrix_json=$(python3 -c "
         import json
         print(json.dumps(list(range(1, $count + 1))))
         ")
         echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
-        echo "✅ Matrix set: $matrix_json"
 
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
 
   # ============================================================
-  # STAGE 2: IMAGE GENERATION (MAX 5 PARALLEL)
+  # STAGE 2: IMAGES
   # ============================================================
   stage2-images:
     needs: stage1-script
@@ -114,31 +91,28 @@ jobs:
         playwright install chromium
         playwright install-deps chromium
 
-    - name: Download Stage 1 Files
+    - name: Download Stage 1
       uses: actions/download-artifact@v4
       with:
         name: stage1-files
 
-    - name: Fix Folder Structure
-      run: |
-        mkdir -p scene_voices
-        mkdir -p scene_images
-        ls -la
+    - name: Setup Folders
+      run: mkdir -p scene_images
 
-    - name: Generate Image (Bing AI)
+    - name: Generate Image
       run: python generate_image.py ${{ matrix.machine_id }}
       env:
         BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         CHAT_ID:   ${{ secrets.CHAT_ID }}
 
-    - name: Upload Image Artifact
+    - name: Upload Image
       uses: actions/upload-artifact@v4
       with:
         name: image_machine_${{ matrix.machine_id }}
         path: scene_images/
 
   # ============================================================
-  # STAGE 3: VIDEO GENERATION (MAX 2 PARALLEL)
+  # STAGE 3: VIDEOS
   # ============================================================
   stage3-videos:
     needs: [stage1-script, stage2-images]
@@ -162,7 +136,7 @@ jobs:
         playwright install chromium
         playwright install-deps chromium
 
-    - name: Download Stage 1 Files
+    - name: Download Stage 1
       uses: actions/download-artifact@v4
       with:
         name: stage1-files
@@ -173,27 +147,23 @@ jobs:
         name: image_machine_${{ matrix.machine_id }}
         path: scene_images/
 
-    - name: Fix Folder Structure
-      run: |
-        mkdir -p scene_voices
-        mkdir -p scene_images
-        mkdir -p generated_videos
-        ls -la
+    - name: Setup Folders
+      run: mkdir -p generated_videos scene_images
 
-    - name: Generate Video (Upsampler AI)
+    - name: Generate Video
       run: python generate_video.py ${{ matrix.machine_id }}
       env:
         BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         CHAT_ID:   ${{ secrets.CHAT_ID }}
 
-    - name: Upload Video Artifact
+    - name: Upload Video
       uses: actions/upload-artifact@v4
       with:
         name: video_machine_${{ matrix.machine_id }}
         path: generated_videos/
 
   # ============================================================
-  # STAGE 4: PROCESS + MERGE + UPLOAD
+  # STAGE 4: PROCESS + UPLOAD
   # ============================================================
   stage4-post-process:
     needs: stage3-videos
@@ -206,23 +176,16 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: Install All Dependencies
+    - name: Install Dependencies
       run: |
-        sudo apt-get update && sudo apt-get install -y \
-          ffmpeg \
-          zip
+        sudo apt-get update && sudo apt-get install -y ffmpeg zip
         pip install \
           google-api-python-client \
           google-auth-httplib2 \
           google-auth-oauthlib \
-          requests \
-          transformers \
-          torch \
-          scipy \
-          soundfile \
-          numpy
+          requests
 
-    - name: Download Stage 1 Files
+    - name: Download Stage 1
       uses: actions/download-artifact@v4
       with:
         name: stage1-files
@@ -234,62 +197,38 @@ jobs:
         pattern: video_machine_*
         merge-multiple: true
 
-    - name: Fix Folder Structure
+    - name: Setup Folders
       run: |
-        mkdir -p scene_voices
-        mkdir -p scene_images
-        mkdir -p generated_videos
-        mkdir -p final_output
-        ls -la
-        echo "--- generated_videos ---"
-        ls -la generated_videos/ || echo "Empty"
-        echo "--- scene_voices ---"
-        ls -la scene_voices/ || echo "Empty"
+        mkdir -p generated_videos final_output
+        echo "--- Videos ---"
+        ls -la generated_videos/
 
-    - name: Download Random Outro
+    - name: Download Outro
       run: python download_outro.py
       env:
         GDRIVE_JSON:      ${{ secrets.GDRIVE_JSON }}
         GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
 
-    - name: Generate AI Background Music
+    - name: Generate Cartoon BGM
       run: python generate_music.py
 
-    - name: Process + Merge + Voice Sync
+    - name: Process + Merge (Tom & Jerry Style)
       run: python process_videos.py
 
-    - name: Create ZIP Package
+    - name: Create ZIP
       run: |
-        if [ -f "bgm.wav" ]; then
-          zip -r Final_Package.zip \
-            final_output/Final_4K_Monetizable_Short.mp4 \
-            metadata.txt \
-            bgm.wav \
-            timing_map.json
-        else
-          zip -r Final_Package.zip \
-            final_output/Final_4K_Monetizable_Short.mp4 \
-            metadata.txt \
-            timing_map.json
-        fi
+        zip -r Final_Package.zip \
+          final_output/Final_4K_Monetizable_Short.mp4 \
+          metadata.txt
 
-    - name: Upload ZIP Artifact
+    - name: Upload ZIP
       uses: actions/upload-artifact@v4
       with:
-        name: Ready_To_Download_Video
+        name: Ready_To_Download
         path: Final_Package.zip
         retention-days: 7
 
-    - name: Auto Upload to YouTube
+    - name: Upload to YouTube
       run: python upload_youtube.py
       env:
         YOUTUBE_TOKEN_BASE64: ${{ secrets.YOUTUBE_TOKEN_BASE64 }}
-
-    - name: Send Final Notification
-      if: always()
-      run: |
-        if [ -f "final_output/Final_4K_Monetizable_Short.mp4" ]; then
-          echo "✅ Pipeline Complete! Video ready."
-        else
-          echo "❌ Pipeline failed! Check logs."
-        fi
