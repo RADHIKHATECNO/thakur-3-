@@ -14,7 +14,7 @@ STORY_FILE    = "story.txt"
 PROMPT_FILE   = "prompts.txt"
 METADATA_FILE = "metadata.txt"
 MUSIC_FILE    = "music_prompt.txt"
-CONFIG_FILE   = "video_config.json"  # Short/Long config save hoga
+CONFIG_FILE   = "video_config.json"
 
 # ============================================================
 # API SETUP
@@ -27,7 +27,7 @@ if not API_KEY:
 client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=API_KEY)
 
 # ============================================================
-# FREE MODELS FETCH
+# FREE MODELS
 # ============================================================
 def get_live_free_models():
     models_list = []
@@ -56,18 +56,16 @@ def get_live_free_models():
     return models_list
 
 # ============================================================
-# STORY FORMAT PARSER
+# STORY PARSER
 # ============================================================
 def parse_story_line(line):
     """
     Format: short | 30sec | topic - comedy
             long  | 10min | topic - comedy
-    Returns: (video_type, duration_sec, topic)
     """
     parts = [p.strip() for p in line.split("|")]
 
     if len(parts) < 3:
-        # Old format fallback: 30 | topic
         try:
             duration_sec = int(re.search(r'\d+', parts[0]).group())
             topic = parts[1].strip() if len(parts) > 1 else parts[0]
@@ -75,13 +73,12 @@ def parse_story_line(line):
         except:
             return "short", 30, line.strip()
 
-    video_type = parts[0].lower().strip()  # short ya long
-    time_str   = parts[1].lower().strip()  # 30sec, 10min etc
-    topic      = parts[2].strip()          # actual topic
+    video_type   = parts[0].lower().strip()
+    time_str     = parts[1].lower().strip()
+    topic        = parts[2].strip()
 
-    # Duration calculate karna
     if "min" in time_str:
-        minutes = int(re.search(r'\d+', time_str).group())
+        minutes      = int(re.search(r'\d+', time_str).group())
         duration_sec = minutes * 60
     else:
         duration_sec = int(re.search(r'\d+', time_str).group())
@@ -89,34 +86,76 @@ def parse_story_line(line):
     return video_type, duration_sec, topic
 
 # ============================================================
-# SCENE COUNT CALCULATOR
+# SCENE CALCULATOR
 # ============================================================
 def calculate_scenes(video_type, duration_sec):
     if video_type == "short":
-        # Shorts: har 5 sec pe 1 scene
         return max(3, math.ceil(duration_sec / 5))
     else:
-        # Long: har 8 sec pe 1 scene
         return max(10, math.ceil(duration_sec / 8))
+
+# ============================================================
+# VISUAL STYLE DETECTOR
+# ============================================================
+def detect_visual_style(topic):
+    """
+    Topic se visual style detect karo
+    """
+    topic_lower = topic.lower()
+
+    # Horror/Dark
+    if any(w in topic_lower for w in [
+        "horror", "dark", "ghost", "bhoot",
+        "scary", "darr", "raat", "shaitan"
+    ]):
+        return "2D Anime dark style"
+
+    # Realistic Human
+    if any(w in topic_lower for w in [
+        "human", "insaan", "aadmi", "ladka",
+        "ladki", "realistic", "real"
+    ]):
+        return "Pixar 3D animation style"
+
+    # Animal
+    if any(w in topic_lower for w in [
+        "animal", "janwar", "dog", "cat",
+        "kutta", "billi", "tiger", "lion"
+    ]):
+        return "cute cartoon animal style"
+
+    # Robot/Sci-fi
+    if any(w in topic_lower for w in [
+        "robot", "sci-fi", "future", "space",
+        "alien", "machine"
+    ]):
+        return "futuristic 3D CGI style"
+
+    # Default - Funny Cartoon
+    return "Pixar 3D funny cartoon style"
 
 # ============================================================
 # CHARACTER GENERATOR
 # ============================================================
-def generate_character(topic):
+def generate_character(topic, visual_style):
     """
-    Topic se ek unique consistent character banao
-    Jo poori video mein same rahe
+    Topic se consistent character banao
     """
-    system = "You are a creative character designer. Give ONE character description in exactly 1 line. Be specific about appearance."
-    prompt = f"""Based on this story topic: '{topic}'
-    
-Create ONE unique funny main character with:
-- Exact name
+    system = (
+        "You are a creative character designer. "
+        "Give ONE character description in exactly 1 line."
+    )
+
+    prompt = f"""Topic: '{topic}'
+Visual Style: {visual_style}
+
+Create ONE unique main character with:
+- Exact name (Hindi/funny name)
 - Exact appearance (color, size, clothing, expression)
 - One funny personality trait
 
-Format: [Name] - [exact appearance] - [funny trait]
-Example: Chotu the Car - shiny red body with big googly eyes and a bent antenna - always complaining loudly
+Format: [Name] | [exact appearance in English for image generation] | [funny trait]
+Example: Motu Singh | fat funny woman, bright orange saree, big round eyes, angry expression | always stuck in traffic
 
 ONE LINE ONLY:"""
 
@@ -133,66 +172,79 @@ ONE LINE ONLY:"""
             )
             char = response.choices[0].message.content.strip().split('\n')[0]
             if char and len(char) > 10:
-                print(f"✅ Character Created: {char}")
+                print(f"✅ Character: {char}")
                 return char
         except:
             time.sleep(1)
 
-    # Fallback character
-    return "Raju - a small round orange robot with big blinking eyes and tiny wheels - always trips but never gives up"
+    return "Raju | small round funny man, blue shirt, big eyes, surprised expression | always does wrong things"
 
 # ============================================================
-# HINDI NARRATION SCRIPT GENERATOR
+# MAIN SCRIPT GENERATOR
 # ============================================================
-def generate_narration_script(video_type, duration_sec, topic, character, scene_count):
+def generate_full_script(video_type, duration_sec, topic, character, scene_count):
     """
-    Har scene ke liye Hindi narration banao
-    Jo exactly visual se match kare
+    Har scene ke liye 3 parts banao:
+    1. Hindi Narration (voice ke liye)
+    2. Image Prompt (Bing ke liye)
+    3. Video Prompt (Upsampler ke liye)
     """
-    system = """You are a master Hindi storyteller and narrator. 
-    You write EXACTLY what is happening on screen in energetic Hindi.
-    Your narration must match the visual 100%.
-    Output ONLY narration lines. No extra text."""
 
+    # Character parts nikalo
+    char_parts   = character.split("|")
+    char_name    = char_parts[0].strip() if len(char_parts) > 0 else "Raju"
+    char_looks   = char_parts[1].strip() if len(char_parts) > 1 else "funny cartoon character"
+    char_trait   = char_parts[2].strip() if len(char_parts) > 2 else "always funny"
+
+    visual_style = detect_visual_style(topic)
+
+    # Aspect ratio
     if video_type == "short":
-        words_per_scene = 20  # ~4 seconds of speech
+        aspect      = "vertical 9:16 composition"
+        image_style = f"{visual_style}, {aspect}, bright colorful"
     else:
-        words_per_scene = 80  # ~16 seconds of speech
+        aspect      = "horizontal 16:9 widescreen"
+        image_style = f"{visual_style}, {aspect}, cinematic"
 
-    prompt = f"""Story Topic: '{topic}'
-Main Character: {character}
+    system = """You are a master Hindi storyteller and YouTube Shorts expert.
+You create EXACTLY formatted scripts with 3 parts per scene.
+Output ONLY the scenes. No extra text. No numbering."""
+
+    prompt = f"""Topic: '{topic}'
+Character Name: {char_name}
+Character Looks: {char_looks}
+Character Trait: {char_trait}
+Visual Style: {visual_style}
+Image Style: {image_style}
 Total Scenes: {scene_count}
-Style: FUNNY, ENERGETIC, HAPPY - No fear, no horror, no sadness
+Mood: FUNNY, HAPPY, ENERGETIC - No horror, no sadness, no fear
 
-Write EXACTLY {scene_count} Hindi narration lines.
-Each line = what narrator says while THAT scene plays on screen.
-Must be energetic, funny, and match the visual action perfectly.
+Create EXACTLY {scene_count} scenes.
 
 RULES:
-- Line 1 = SUPER HOOK - most exciting moment to grab attention
-- Every line must describe EXACTLY what character is doing
-- Use funny expressions: "Arrey!", "Waah!", "Oho!", "Haha!"
-- Each line max {words_per_scene} words
-- Hindi only (Devanagari script)
-- NO English words
-- End with satisfying conclusion
+- Scene 1 = SUPER HOOK (most exciting moment)
+- Same character {char_name} in EVERY scene
+- Hindi narration = energetic, funny, use "Arrey!", "Waah!", "Oho!"
+- Image prompt = detailed English description for AI image generation
+- Video prompt = camera movement + sound effects description
+- Story must match 100% - visual and narration same cheez
 
-FORMAT (use | separator):
-[Scene visual description in English] | [Hindi narration text]
+FORMAT (use >> to separate 3 parts):
+[Hindi narration] >> [Detailed image prompt in English] >> [Video motion + SFX prompt]
 
-Example:
-Raju robot slipping on banana peel with shocked face | अरे! राजू भाई फिसल गए केले के छिलके पर, और उनका चेहरा देखो - एकदम गोल आँखें!
+EXAMPLE:
+अरे! मोटू सिंह ट्रैफिक में फंस गई! >> {visual_style}, {char_looks} named {char_name} stuck in heavy traffic jam, angry face, honking horn, bright colorful street, {aspect}, high quality >> Motu Singh honking loudly with shaking car, camera zoom in on angry face, SFX: loud horns, city noise, no bgm, no voice
 
-START DIRECTLY:"""
+START DIRECTLY WITH SCENE 1:"""
 
-    models = get_live_free_models()
-    max_attempts = 10
+    models    = get_live_free_models()
+    max_tries = 10
 
     for attempt, model in enumerate(models, 1):
-        if attempt > max_attempts:
+        if attempt > max_tries:
             break
         for retry in range(2):
-            print(f"🔄 Narration Attempt {attempt} - Model: {model}")
+            print(f"🔄 Attempt {attempt} - Model: {model}")
             try:
                 response = client.chat.completions.create(
                     model=model,
@@ -204,21 +256,31 @@ START DIRECTLY:"""
                 )
                 text = response.choices[0].message.content.strip()
 
-                # Valid lines filter karo
+                print("\n--- RAW OUTPUT ---")
+                print(text[:300])
+                print("------------------\n")
+
+                # Valid lines filter
                 valid = []
                 for line in text.split('\n'):
                     line = line.strip()
                     line = re.sub(r'^[\d\.\-\*\s]+', '', line)
-                    if '|' in line and len(line) > 20:
-                        parts = line.split('|')
-                        if len(parts) >= 2 and len(parts[1].strip()) > 5:
-                            valid.append(line)
+                    if '>>' in line:
+                        parts = line.split('>>')
+                        if len(parts) >= 3:
+                            narration = parts[0].strip()
+                            img_prompt = parts[1].strip()
+                            vid_prompt = parts[2].strip()
+                            if (len(narration) > 5 and
+                                    len(img_prompt) > 10 and
+                                    len(vid_prompt) > 10):
+                                valid.append(line)
 
-                if len(valid) >= scene_count * 0.7:  # 70% scenes mil gaye
-                    print(f"✅ Got {len(valid)} narration scenes!")
+                if len(valid) >= scene_count * 0.7:
+                    print(f"✅ Got {len(valid)} valid scenes!")
                     return valid[:scene_count]
                 else:
-                    print(f"⚠️ Only {len(valid)} valid lines. Retrying...")
+                    print(f"⚠️ Only {len(valid)} valid. Retrying...")
 
             except Exception as e:
                 print(f"⚠️ Model {model} failed: {e}")
@@ -227,42 +289,36 @@ START DIRECTLY:"""
     return None
 
 # ============================================================
-# VIRAL METADATA GENERATOR
+# METADATA GENERATOR
 # ============================================================
 def generate_viral_metadata(video_type, topic, character):
-    system = "You are a YouTube viral growth expert. Create metadata that gets maximum clicks and views."
+    system = "You are a YouTube viral growth expert."
+
+    char_name = character.split("|")[0].strip()
 
     if video_type == "short":
-        format_hint = "YouTube Shorts (vertical 9:16, under 60 seconds)"
-        title_style = "Short punchy title with emoji, max 60 chars"
+        format_hint = "YouTube Shorts 9:16"
+        title_style = "Short punchy Hindi title with emoji max 60 chars"
     else:
-        format_hint = "YouTube Long Video (horizontal 16:9, 10-20 minutes)"
-        title_style = "Engaging long-form title with keywords, max 70 chars"
+        format_hint = "YouTube Long Video 16:9"
+        title_style = "Engaging Hindi title with keywords max 70 chars"
 
     prompt = f"""Topic: '{topic}'
-Character: {character}
+Character: {char_name}
 Format: {format_hint}
-Mood: Funny, Happy, Energetic, Family-Friendly
+Mood: Funny, Happy, Family-Friendly
 
 Create VIRAL YouTube metadata:
-
 TITLE: [{title_style}]
-DESC: [2-3 lines, funny hook, includes character name, ends with subscribe CTA]
-TAGS: [15 viral Hindi comedy tags, comma separated]
-MUSIC: [5-7 word upbeat funny background music description]
+DESC: [2-3 funny lines + subscribe CTA in Hindi]
+TAGS: [15 viral Hindi comedy tags]
+MUSIC: [5-7 word upbeat funny music description]"""
 
-Rules:
-- Title must make people CLICK immediately
-- Description first line = strongest hook
-- Tags mix: Hindi + English comedy tags
-- All family friendly, advertiser safe"""
-
-    models = get_live_free_models()
-    default_music = "upbeat funny cartoon comedy background music"
+    models       = get_live_free_models()
+    default_music = "upbeat funny cartoon comedy music"
 
     for model in models[:4]:
         try:
-            print(f"📊 Metadata generation - Model: {model}")
             response = client.chat.completions.create(
                 model=model,
                 messages=[
@@ -273,31 +329,59 @@ Rules:
             )
             text = response.choices[0].message.content
 
-            title   = re.search(r"TITLE:\s*(.*)", text).group(1).strip()
-            desc    = re.search(r"DESC:\s*([\s\S]*?)TAGS:", text).group(1).strip()
-            tags    = re.search(r"TAGS:\s*(.*)", text).group(1).strip()
-            music   = re.search(r"MUSIC:\s*(.*)", text).group(1).strip()
+            title = re.search(r"TITLE:\s*(.*)", text).group(1).strip()
+            desc  = re.search(
+                r"DESC:\s*([\s\S]*?)(?:TAGS:|$)", text
+            ).group(1).strip()
+            tags  = re.search(r"TAGS:\s*(.*)", text).group(1).strip()
+            music = re.search(r"MUSIC:\s*(.*)", text).group(1).strip()
 
             with open(MUSIC_FILE, "w", encoding="utf-8") as f:
                 f.write(music)
 
-            print("✅ Viral Metadata Generated!")
+            print("✅ Metadata generated!")
             return title, desc, tags
 
         except Exception as e:
-            print(f"⚠️ Metadata model {model} failed: {e}")
+            print(f"⚠️ Metadata failed: {e}")
             time.sleep(1)
 
-    # Fallback
     with open(MUSIC_FILE, "w", encoding="utf-8") as f:
         f.write(default_music)
-    return "😂 Funny Story Jo Aapko Hasaegi!", "Ek mazedaar kahani sunne ke liye tayaar ho jao!", "funny, comedy, hindi, shorts, viral"
+    return (
+        "😂 Funny Hindi Story!",
+        "Ek mazedaar kahani!",
+        "funny, comedy, hindi, shorts, viral"
+    )
 
 # ============================================================
-# MAIN PIPELINE
+# PROMPTS SAVER
+# ============================================================
+def save_prompts(script_lines):
+    """
+    prompts.txt mein save karo
+    Format: NARRATION >> IMAGE_PROMPT >> VIDEO_PROMPT
+    """
+    with open(PROMPT_FILE, "w", encoding="utf-8") as f:
+        for line in script_lines:
+            f.write(line.strip() + "\n")
+
+    print(f"✅ {len(script_lines)} scenes saved to prompts.txt")
+
+    # Debug - pehla scene dikhao
+    if script_lines:
+        parts = script_lines[0].split(">>")
+        print(f"\n📝 Scene 1 Preview:")
+        print(f"   🎙️  Narration : {parts[0].strip()[:60]}...")
+        if len(parts) > 1:
+            print(f"   🎨 Image     : {parts[1].strip()[:60]}...")
+        if len(parts) > 2:
+            print(f"   🎬 Video     : {parts[2].strip()[:60]}...")
+
+# ============================================================
+# MAIN
 # ============================================================
 def process_stories():
-    # Story file check
     if not os.path.exists(STORY_FILE):
         print(f"❌ {STORY_FILE} not found!")
         sys.exit(1)
@@ -309,60 +393,60 @@ def process_stories():
         print(f"❌ {STORY_FILE} is empty!")
         sys.exit(1)
 
-    topics = [t.strip() for t in content.split("\n") if t.strip()]
-    current_line = topics[0]
+    topics      = [t.strip() for t in content.split("\n") if t.strip()]
+    current     = topics[0]
 
     print(f"\n{'='*50}")
-    print(f"📖 Processing: {current_line}")
+    print(f"📖 Processing: {current}")
     print(f"{'='*50}\n")
 
-    # Parse format
-    video_type, duration_sec, topic = parse_story_line(current_line)
-    scene_count = calculate_scenes(video_type, duration_sec)
+    video_type, duration_sec, topic = parse_story_line(current)
+    scene_count  = calculate_scenes(video_type, duration_sec)
+    visual_style = detect_visual_style(topic)
 
-    print(f"📺 Video Type : {video_type.upper()}")
-    print(f"⏱️  Duration   : {duration_sec} seconds")
-    print(f"🎬 Scenes     : {scene_count}")
-    print(f"📝 Topic      : {topic}\n")
+    print(f"📺 Type         : {video_type.upper()}")
+    print(f"⏱️  Duration     : {duration_sec}s")
+    print(f"🎬 Scenes       : {scene_count}")
+    print(f"🎨 Visual Style : {visual_style}")
+    print(f"📝 Topic        : {topic}\n")
 
-    # Step 1: Character banao
-    print("👤 Creating consistent character...")
-    character = generate_character(topic)
+    # Character banao
+    print("👤 Creating character...")
+    character = generate_character(topic, visual_style)
 
-    # Step 2: Narration + Visual prompts banao
-    print("\n📝 Generating narration + visual script...")
-    script_lines = generate_narration_script(
+    # Script banao
+    print("\n📝 Generating full script...")
+    script_lines = generate_full_script(
         video_type, duration_sec, topic, character, scene_count
     )
 
     if not script_lines:
-        print("❌ Script generation failed after all attempts!")
+        print("❌ Script generation failed!")
         sys.exit(1)
 
-    # Step 3: prompts.txt save karo
-    # Format: visual_prompt | narration_hindi
-    with open(PROMPT_FILE, "w", encoding="utf-8") as f:
-        for line in script_lines:
-            f.write(line.strip() + "\n")
+    # Prompts save karo
+    save_prompts(script_lines)
 
-    print(f"\n✅ {len(script_lines)} scenes written to {PROMPT_FILE}")
-
-    # Step 4: Video config save karo (baaki files use karengi)
+    # Config save karo
     config = {
-        "video_type": video_type,
-        "duration_sec": duration_sec,
-        "topic": topic,
-        "character": character,
-        "scene_count": len(script_lines),
-        "aspect_ratio": "9:16" if video_type == "short" else "16:9"
+        "video_type"   : video_type,
+        "duration_sec" : duration_sec,
+        "topic"        : topic,
+        "character"    : character,
+        "visual_style" : visual_style,
+        "scene_count"  : len(script_lines),
+        "aspect_ratio" : "9:16" if video_type == "short" else "16:9"
     }
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2, ensure_ascii=False)
-    print(f"✅ Video config saved: {config}")
 
-    # Step 5: Viral Metadata banao
+    print(f"✅ Config saved!")
+
+    # Metadata banao
     print("\n🚀 Generating viral metadata...")
-    title, desc, tags = generate_viral_metadata(video_type, topic, character)
+    title, desc, tags = generate_viral_metadata(
+        video_type, topic, character
+    )
 
     with open(METADATA_FILE, "w", encoding="utf-8") as f:
         f.write(f"TITLE: {title}\n")
@@ -371,18 +455,16 @@ def process_stories():
         f.write(f"VIDEO_TYPE: {video_type}\n")
 
     print(f"\n{'='*50}")
-    print(f"🎉 ALL DONE!")
+    print(f"🎉 STAGE 1 COMPLETE!")
     print(f"   Title     : {title}")
-    print(f"   Character : {character}")
+    print(f"   Character : {character[:50]}...")
     print(f"   Scenes    : {len(script_lines)}")
     print(f"{'='*50}\n")
 
-    # Step 6: Used story remove karo
+    # Used story hatao
     remaining = topics[1:]
     with open(STORY_FILE, "w", encoding="utf-8") as f:
         f.write("\n".join(remaining) + "\n" if remaining else "")
-
-    print("🚀 Pipeline Stage 1 Complete!")
 
 if __name__ == "__main__":
     process_stories()
