@@ -1,234 +1,143 @@
-name: Advanced Cinematic AI Pipeline
+name: Long-Form Cinematic AI Pipeline
 
 on:
   schedule:
-    - cron: '30 00 * * *'
-    - cron: '30 12 * * *'
-  workflow_dispatch:
+    - cron: '30 00 * * *'  # Roz Subah 5:00 Baje (IST)
+    - cron: '30 12 * * *'  # Roz Shaam 8:00 Baje (IST)
+  workflow_dispatch:       # Manual Button
 
 permissions:
   contents: write
 
 jobs:
-  # ============================================================
-  # STAGE 1: SCRIPT ONLY (No Voice!)
-  # ============================================================
-  stage1-script:
+  # ==========================================
+  # STAGE 1: AI SCRIPT & AUDIO GENERATION
+  # ==========================================
+  stage1-script-audio:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-
     - uses: actions/setup-python@v5
       with:
         python-version: '3.10'
-
+        
     - name: Install Dependencies
       run: pip install openai requests
-
-    - name: Generate Tom & Jerry Script
+        
+    - name: Generate AI Prompts (Script & Hooks)
       run: python auto_prompt.py
       env:
         OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 
-    - name: Commit Files
+    - name: Generate Voiceover (ElevenLabs)
+      run: python generate_audio.py
+      env:
+        ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+        
+    - name: Commit updated txt files
       run: |
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
-        git add \
-          story.txt \
-          prompts.txt \
-          metadata.txt \
-          music_prompt.txt \
-          video_config.json || true
-        git commit -m "Auto: Tom & Jerry Script" || echo "No changes"
+        git add story.txt character.txt metadata.txt prompts.txt music_prompt.txt
+        git commit -m "Auto-updated long-form script files" || echo "No changes to commit"
         git push
-
-    - name: Upload Artifacts
-      uses: actions/upload-artifact@v4
+        
+    - uses: actions/upload-artifact@v4
       with:
-        name: stage1-files
+        name: script-audio-data
         path: |
           prompts.txt
           metadata.txt
           music_prompt.txt
-          video_config.json
-
+          voiceover.mp3
+          audio_timestamps.json
+          
     - id: set-matrix
       run: |
         count=$(grep -c '^' prompts.txt || echo 0)
         if [ "$count" -eq 0 ]; then exit 1; fi
-        matrix_json=$(python3 -c "
-        import json
-        print(json.dumps(list(range(1, $count + 1))))
-        ")
+        matrix_json=$(python3 -c "import json; print(json.dumps(list(range(1, $count + 1))))")
         echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
-
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
 
-  # ============================================================
-  # STAGE 2: IMAGES
-  # ============================================================
+  # ==========================================
+  # STAGE 2: BING IMAGE GENERATION (16:9 FIX)
+  # ==========================================
   stage2-images:
-    needs: stage1-script
+    needs: stage1-script-audio
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      max-parallel: 5
+      max-parallel: 4
       matrix:
-        machine_id: ${{ fromJson(needs.stage1-script.outputs.matrix) }}
-
+        machine_id: ${{ fromJson(needs.stage1-script-audio.outputs.matrix) }}
     steps:
     - uses: actions/checkout@v4
-
     - uses: actions/setup-python@v5
       with:
         python-version: '3.10'
-
-    - name: Install Dependencies
+        
+    - name: Install Playwright & Image Libs
       run: |
-        pip install requests playwright
+        pip install requests playwright pillow
         playwright install chromium
         playwright install-deps chromium
-
-    - name: Download Stage 1
-      uses: actions/download-artifact@v4
+        
+    - uses: actions/download-artifact@v4
       with:
-        name: stage1-files
-
-    - name: Setup Folders
-      run: mkdir -p scene_images
-
-    - name: Generate Image
+        name: script-audio-data
+        
+    - name: Generate & Format Image (Bing AI 16:9)
+      env:
+        BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        CHAT_ID: ${{ secrets.CHAT_ID }}
       run: python generate_image.py ${{ matrix.machine_id }}
-      env:
-        BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-        CHAT_ID:   ${{ secrets.CHAT_ID }}
-
-    - name: Upload Image
-      uses: actions/upload-artifact@v4
+      
+    - uses: actions/upload-artifact@v4
       with:
         name: image_machine_${{ matrix.machine_id }}
         path: scene_images/
 
-  # ============================================================
-  # STAGE 3: VIDEOS
-  # ============================================================
-  stage3-videos:
-    needs: [stage1-script, stage2-images]
+  # ==========================================
+  # STAGE 3: EDITING & UPLOAD (LONG FORMAT)
+  # ==========================================
+  stage3-edit-upload:
+    needs: stage2-images
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      max-parallel: 2
-      matrix:
-        machine_id: ${{ fromJson(needs.stage1-script.outputs.matrix) }}
-
     steps:
     - uses: actions/checkout@v4
-
     - uses: actions/setup-python@v5
       with:
         python-version: '3.10'
-
-    - name: Install Dependencies
-      run: |
-        pip install requests playwright
-        playwright install chromium
-        playwright install-deps chromium
-
-    - name: Download Stage 1
-      uses: actions/download-artifact@v4
-      with:
-        name: stage1-files
-
-    - name: Download Image
-      uses: actions/download-artifact@v4
-      with:
-        name: image_machine_${{ matrix.machine_id }}
-        path: scene_images/
-
-    - name: Setup Folders
-      run: mkdir -p generated_videos scene_images
-
-    - name: Generate Video
-      run: python generate_video.py ${{ matrix.machine_id }}
-      env:
-        BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-        CHAT_ID:   ${{ secrets.CHAT_ID }}
-
-    - name: Upload Video
-      uses: actions/upload-artifact@v4
-      with:
-        name: video_machine_${{ matrix.machine_id }}
-        path: generated_videos/
-
-  # ============================================================
-  # STAGE 4: PROCESS + UPLOAD
-  # ============================================================
-  stage4-post-process:
-    needs: stage3-videos
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
-
-    - name: Install Dependencies
+        
+    - name: Install System Dependencies
       run: |
         sudo apt-get update && sudo apt-get install -y ffmpeg zip
-        pip install \
-          google-api-python-client \
-          google-auth-httplib2 \
-          google-auth-oauthlib \
-          requests
-
-    - name: Download Stage 1
-      uses: actions/download-artifact@v4
+        pip install google-api-python-client google-auth-httplib2 google-auth-oauthlib requests transformers torch scipy pillow
+        
+    - uses: actions/download-artifact@v4
       with:
-        name: stage1-files
-
-    - name: Download All Videos
-      uses: actions/download-artifact@v4
+        name: script-audio-data
+        
+    - uses: actions/download-artifact@v4
       with:
-        path: generated_videos/
-        pattern: video_machine_*
+        path: scene_images/
+        pattern: image_machine_*
         merge-multiple: true
 
-    - name: Setup Folders
-      run: |
-        mkdir -p generated_videos final_output
-        echo "--- Videos ---"
-        ls -la generated_videos/
-
-    - name: Download Outro
-      run: python download_outro.py
-      env:
-        GDRIVE_JSON:      ${{ secrets.GDRIVE_JSON }}
-        GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
-
-    - name: Generate Cartoon BGM
+    - name: Generate Local AI BGM Loop
       run: python generate_music.py
-
-    - name: Process + Merge (Tom & Jerry Style)
+        
+    - name: Master Assembly (Sync Audio, Images & Ken Burns)
       run: python process_videos.py
-
-    - name: Create ZIP
-      run: |
-        zip -r Final_Package.zip \
-          final_output/Final_4K_Monetizable_Short.mp4 \
-          metadata.txt
-
-    - name: Upload ZIP
-      uses: actions/upload-artifact@v4
+      
+    - uses: actions/upload-artifact@v4
       with:
-        name: Ready_To_Download
-        path: Final_Package.zip
-        retention-days: 7
-
-    - name: Upload to YouTube
-      run: python upload_youtube.py
+        name: Final_Long_Video
+        path: final_output/Final_Masterpiece.mp4
+        
+    - name: Auto Upload to YouTube
       env:
         YOUTUBE_TOKEN_BASE64: ${{ secrets.YOUTUBE_TOKEN_BASE64 }}
+      run: python upload_youtube.py
