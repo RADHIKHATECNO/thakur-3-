@@ -7,9 +7,9 @@ import requests
 # ============================================================
 # CONFIG
 # ============================================================
-PROMPT_FILE  = "prompts.txt"
-CONFIG_FILE  = "video_config.json"
-VOICE_DIR    = "scene_voices"
+PROMPT_FILE = "prompts.txt"
+CONFIG_FILE = "video_config.json"
+VOICE_DIR   = "scene_voices"
 os.makedirs(VOICE_DIR, exist_ok=True)
 
 # ============================================================
@@ -33,29 +33,46 @@ def get_api_keys():
     print(f"✅ {len(keys)} ElevenLabs API key(s) mili!")
     return keys
 
+# ============================================================
+# CREDIT CHECKER
+# ============================================================
 def check_credits(api_key):
     """
     Check karo is key mein credits hain ya nahi
     """
     try:
-        url = "https://api.elevenlabs.io/v1/user/subscription"
+        url     = "https://api.elevenlabs.io/v1/user"
         headers = {"xi-api-key": api_key}
         response = requests.get(url, headers=headers, timeout=10)
 
+        print(f"   📡 Status Code: {response.status_code}")
+
         if response.status_code == 200:
-            data = response.json()
-            used      = data.get("character_count", 0)
-            limit     = data.get("character_limit", 0)
-            remaining = limit - used
+            data         = response.json()
+            subscription = data.get("subscription", {})
+            used         = subscription.get("character_count", 0)
+            limit        = subscription.get("character_limit", 10000)
+            remaining    = limit - used
             print(f"   💳 Credits remaining: {remaining}/{limit}")
-            return remaining > 100  # 100 se zyada hone chahiye
-        else:
-            print(f"   ⚠️ Credit check failed: {response.status_code}")
+            return remaining > 100
+
+        elif response.status_code == 401:
+            print(f"   ❌ Invalid API Key!")
             return False
+
+        else:
+            print(f"   ⚠️ Status: {response.status_code} - Trying anyway...")
+            # Unknown error pe bhi try karne do
+            return True
+
     except Exception as e:
         print(f"   ⚠️ Credit check error: {e}")
-        return False
+        # Error pe bhi True do taaki generation try ho
+        return True
 
+# ============================================================
+# WORKING KEY FINDER
+# ============================================================
 def get_working_key(api_keys):
     """
     Saari keys check karo, jo kaam kare woh do
@@ -97,12 +114,12 @@ def generate_voice_for_scene(
 
     payload = {
         "text": hindi_text,
-        "model_id": "eleven_multilingual_v2",  # Hindi support ke liye best model
+        "model_id": "eleven_multilingual_v2",
         "voice_settings": {
-            "stability": 0.35,        # Energetic ke liye low stability
+            "stability": 0.35,
             "similarity_boost": 0.80,
-            "style": 0.70,            # Expressive style
-            "use_speaker_boost": True  # Energetic boost
+            "style": 0.70,
+            "use_speaker_boost": True
         }
     }
 
@@ -116,25 +133,30 @@ def generate_voice_for_scene(
         try:
             headers = {
                 "xi-api-key": current_key,
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
+                "Accept": "audio/mpeg"
             }
+
             response = requests.post(
                 url,
                 json=payload,
                 headers=headers,
-                timeout=30
+                timeout=60
             )
+
+            print(f"   📡 Status: {response.status_code}")
 
             # ✅ Success
             if response.status_code == 200:
                 with open(out_path, "wb") as f:
                     f.write(response.content)
-                print(f"✅ Scene {scene_id} voice generated! ({len(response.content)} bytes)")
+                size = len(response.content)
+                print(f"✅ Scene {scene_id} voice done! ({size} bytes)")
                 return out_path, current_key
 
-            # 💳 Credits khatam - next key try karo
+            # 💳 Credits khatam
             elif response.status_code in [401, 429]:
-                print(f"⚠️  Key exhausted (Status {response.status_code})! Switching to next key...")
+                print(f"⚠️  Key exhausted! Switching to next key...")
                 key_index += 1
                 if key_index < len(api_keys):
                     current_key = api_keys[key_index]
@@ -144,24 +166,24 @@ def generate_voice_for_scene(
                     print("❌ Saari keys khatam ho gayi!")
                     sys.exit(1)
 
-            # ⚠️ Server error - retry
+            # ⚠️ Server error
             elif response.status_code >= 500:
-                print(f"⚠️  Server error {response.status_code}. Retrying in 5 sec...")
+                print(f"⚠️  Server error. Retrying in 5s...")
                 time.sleep(5)
 
             else:
-                print(f"⚠️  Unexpected status {response.status_code}: {response.text[:100]}")
+                print(f"⚠️  Error {response.status_code}: {response.text[:150]}")
                 time.sleep(3)
 
         except requests.exceptions.Timeout:
-            print(f"⚠️  Timeout on attempt {attempt}. Retrying...")
+            print(f"⚠️  Timeout! Retrying...")
             time.sleep(5)
 
         except Exception as e:
-            print(f"⚠️  Error: {e}. Retrying...")
+            print(f"⚠️  Exception: {e}")
             time.sleep(3)
 
-    print(f"❌ Scene {scene_id} voice failed after {max_retries} attempts!")
+    print(f"❌ Scene {scene_id} voice failed!")
     return None, current_key
 
 # ============================================================
@@ -182,70 +204,80 @@ def extract_narrations():
 
     for idx, line in enumerate(lines, 1):
         line = line.strip()
+        if not line:
+            continue
+
         if "|" in line:
-            parts = line.split("|", 1)
+            parts      = line.split("|", 1)
             hindi_text = parts[1].strip()
             if hindi_text:
                 narrations[idx] = hindi_text
-        elif line:
-            narrations[idx] = line  # Fallback
+        else:
+            # Fallback - poori line narration
+            narrations[idx] = line
 
     print(f"📝 {len(narrations)} narration scenes extracted!")
+
+    # Debug - pehle 2 scenes print karo
+    for k, v in list(narrations.items())[:2]:
+        print(f"   Scene {k}: {v[:60]}...")
+
     return narrations
 
 # ============================================================
-# DURATION CALCULATOR
+# AUDIO DURATION
 # ============================================================
 def get_audio_duration(audio_path):
     """
-    Audio file ki duration seconds mein nikalo
-    FFprobe use karta hai
+    Audio file ki duration nikalo ffprobe se
     """
     try:
         import subprocess
         result = subprocess.run(
             [
-                "ffprobe", "-v", "quiet",
+                "ffprobe",
+                "-v", "quiet",
                 "-show_entries", "format=duration",
                 "-of", "csv=p=0",
                 audio_path
             ],
-            capture_output=True, text=True
+            capture_output=True,
+            text=True
         )
         duration = float(result.stdout.strip())
         return round(duration, 2)
     except:
-        return 4.0  # Default fallback
+        return 4.0
 
 # ============================================================
-# TIMING MAP GENERATOR
+# TIMING MAP
 # ============================================================
 def create_timing_map(voice_files):
     """
     Har scene ki audio duration save karo
-    Yeh process_videos.py use karega sync ke liye
+    process_videos.py use karega sync ke liye
     """
     timing_map = {}
 
     for scene_id, voice_path in voice_files.items():
         if voice_path and os.path.exists(voice_path):
             duration = get_audio_duration(voice_path)
-            timing_map[scene_id] = {
+            timing_map[str(scene_id)] = {
                 "voice_path": voice_path,
                 "duration_sec": duration
             }
-            print(f"   Scene {scene_id}: {duration}s")
+            print(f"   ⏱️  Scene {scene_id}: {duration}s")
         else:
-            timing_map[scene_id] = {
+            timing_map[str(scene_id)] = {
                 "voice_path": None,
-                "duration_sec": 5.0  # Default
+                "duration_sec": 5.0
             }
 
     # Save karo
     with open("timing_map.json", "w", encoding="utf-8") as f:
-        json.dump(timing_map, f, indent=2)
+        json.dump(timing_map, f, indent=2, ensure_ascii=False)
 
-    print(f"\n✅ Timing map saved! Total scenes: {len(timing_map)}")
+    print(f"\n✅ Timing map saved!")
     return timing_map
 
 # ============================================================
@@ -256,11 +288,16 @@ def main():
     print("🎙️  ELEVENLABS HINDI VOICE GENERATOR")
     print("="*50 + "\n")
 
-    # Config load karo
+    # Voice ID
     voice_id = os.getenv(
         "ELEVENLABS_VOICE_ID",
-        "pNInz6obpgDQGcFmaJgB"  # Default: Adam (Energetic Male)
-    )
+        "pNInz6obpgDQGcFmaJgB"  # Default Adam - Energetic Male
+    ).strip()
+
+    # Agar voice id empty ho toh default use karo
+    if not voice_id:
+        voice_id = "pNInz6obpgDQGcFmaJgB"
+
     print(f"🎤 Voice ID: {voice_id}")
 
     # API Keys lo
@@ -282,17 +319,18 @@ def main():
 
     for scene_id, hindi_text in narrations.items():
         print(f"\n--- Scene {scene_id} ---")
-        print(f"📝 Text: {hindi_text[:60]}...")
+        print(f"📝 Text: {hindi_text[:80]}...")
 
         voice_path, current_key = generate_voice_for_scene(
-            scene_id=scene_id,
-            hindi_text=hindi_text,
-            api_key=current_key,
-            voice_id=voice_id,
-            api_keys=api_keys
+            scene_id   = scene_id,
+            hindi_text = hindi_text,
+            api_key    = current_key,
+            voice_id   = voice_id,
+            api_keys   = api_keys
         )
+
         voice_files[scene_id] = voice_path
-        time.sleep(0.5)  # Rate limit se bachne ke liye
+        time.sleep(0.5)
 
     # Timing map banao
     print("\n⏱️  Creating timing map...")
@@ -306,7 +344,7 @@ def main():
     print(f"🎉 VOICE GENERATION COMPLETE!")
     print(f"   ✅ Success : {success} scenes")
     print(f"   ❌ Failed  : {failed} scenes")
-    print(f"   📁 Saved in: {VOICE_DIR}/")
+    print(f"   📁 Saved   : {VOICE_DIR}/")
     print("="*50 + "\n")
 
 if __name__ == "__main__":
