@@ -11,14 +11,14 @@ CHARACTER_FILE = "character.txt"
 PROMPT_FILE = "prompts.txt"
 METADATA_FILE = "metadata.txt"
 
-# KIE API Key
+# KIE API Key from GitHub Secrets
 API_KEY = os.getenv("KIE_API_KEY")
 if not API_KEY:
     print("❌ ERROR: KIE_API_KEY is missing in GitHub Secrets!")
     sys.exit(1)
 
-# API Endpoint setup
-API_URL = "https://api.kie.ai/v1/chat/completions"
+# ✅ Naya KIE Codex Endpoint jo aapne cURL me diya tha
+API_URL = "https://api.kie.ai/codex/v1/responses"
 MODEL_NAME = "gpt-6-astra"
 
 def setup_files():
@@ -35,13 +35,27 @@ def call_kie_api(system_prompt, user_prompt):
         "Authorization": f"Bearer {API_KEY}",
         "Content-Type": "application/json"
     }
+    
+    # System aur User prompt ko jod dete hain taaki Astra ko puri command ek saath mile
+    full_prompt = f"{system_prompt}\n\n{user_prompt}"
+    
+    # ✅ Exact wahi format jo aapne bheja tha
     data = {
         "model": MODEL_NAME,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
+        "input": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": full_prompt
+                    }
+                ]
+            }
         ],
-        "temperature": 0.7
+        "reasoning": {
+            "effort": "low" # Credits bachane ke liye low rakha hai, kaam perfect karega
+        }
     }
     
     response = requests.post(API_URL, headers=headers, json=data)
@@ -49,7 +63,15 @@ def call_kie_api(system_prompt, user_prompt):
     if response.status_code == 200:
         res_json = response.json()
         try:
-            return res_json['choices'][0]['message']['content']
+            # ✅ Parsing based on the exact JSON response you provided
+            outputs = res_json.get('output', [])
+            for item in outputs:
+                if item.get('type') == 'message':
+                    contents = item.get('content', [])
+                    for content_item in contents:
+                        if content_item.get('type') == 'output_text':
+                            return content_item.get('text')
+            return None
         except Exception as e:
             print(f"⚠️ JSON Parse Error: {e}. Raw Response: {response.text}")
             return None
@@ -62,7 +84,8 @@ def generate_ai_script(duration_str, style, topic, character_rules):
         minutes = int(re.search(r'\d+', duration_str).group())
     except:
         minutes = 1
-    # Assuming 1 scene every 3.5 seconds
+    
+    # 1 scene every 3.5 seconds
     target_scenes = max(5, math.ceil((minutes * 60) / 3.5))
 
     system_prompt = "You are an Elite YouTube Scriptwriter and Master Storyboard Artist. You MUST follow instructions strictly."
@@ -96,11 +119,11 @@ def generate_ai_script(duration_str, style, topic, character_rules):
         if text:
             valid_lines = [line.strip() for line in text.split('\n') if '|' in line and not line.startswith('|')]
             if len(valid_lines) >= 5:
-                print(f"✅ Success! Generated {len(valid_lines)} micro-scenes/prompts from gpt-6-astra.")
+                print(f"✅ Success! Generated {len(valid_lines)} micro-scenes/prompts from {MODEL_NAME}.")
                 return "\n".join(valid_lines)
             else:
                 print(f"⚠️ Bad Formatting. AI Output: {text[:100]}... Retrying!")
-        time.sleep(2)
+        time.sleep(3)
             
     print("❌ Failed to generate script after 3 attempts.")
     sys.exit(1)
@@ -129,7 +152,6 @@ def generate_ai_metadata(topic):
         except Exception as e:
             print(f"⚠️ Failed to parse metadata text: {e}")
             
-    # Default Fallback
     with open("music_prompt.txt", "w", encoding="utf-8") as f: f.write("epic emotional cinematic storytelling background score")
     return "Amazing Story You Must Watch 🔥", "Watch this amazing story till the end!", "story, viral, trending"
 
