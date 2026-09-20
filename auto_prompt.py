@@ -4,32 +4,35 @@ import re
 import math
 import time
 import requests
+import json
 
 STORY_FILE = "story.txt"
 CHARACTER_FILE = "character.txt"
 PROMPT_FILE = "prompts.txt"
 METADATA_FILE = "metadata.txt"
 
-API_KEY = os.getenv("COHERE_API_KEY")
+# OpenRouter API Key
+API_KEY = os.getenv("OPENROUTER_API_KEY")
 if not API_KEY:
-    print("❌ ERROR: COHERE_API_KEY is missing in GitHub Secrets!")
+    print("❌ ERROR: OPENROUTER_API_KEY is missing in GitHub Secrets!")
     sys.exit(1)
 
 def setup_files():
     if not os.path.exists(CHARACTER_FILE):
         with open(CHARACTER_FILE, "w", encoding="utf-8") as f:
-            f.write("All characters should look realistic and cinematic. Ensure the style is consistent.")
+            f.write("CRITICAL: All characters must follow a consistent art style. Describe their age, clothes, face, and accessories in extreme detail.")
     
     if not os.path.exists(STORY_FILE):
         with open(STORY_FILE, "w", encoding="utf-8") as f:
             f.write("4 min | 3D Pixar Animation | Ek lalachi kauwa aur jadui paani ki kahani\n")
-            
-def call_cohere_api_v2(system_prompt, user_prompt, model_name):
-    url = "https://api.cohere.com/v2/chat"
+
+def call_openrouter(system_prompt, user_prompt, model_name):
+    url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {API_KEY}",
         "Content-Type": "application/json",
-        "Accept": "application/json"
+        "HTTP-Referer": "https://github.com/thakur-3", 
+        "X-Title": "YouTube Automation"
     }
     data = {
         "model": model_name,
@@ -39,22 +42,27 @@ def call_cohere_api_v2(system_prompt, user_prompt, model_name):
         ],
         "temperature": 0.7
     }
+    
     try:
         response = requests.post(url, headers=headers, json=data, timeout=90)
         if response.status_code == 200:
             res_json = response.json()
-            try:
-                contents = res_json["message"]["content"]
-                for item in contents:
-                    if item.get("type") == "text":
-                        return item.get("text")
-                return None
-            except KeyError:
-                return None
+            return res_json["choices"][0]["message"]["content"]
         else:
+            print(f"⚠️ OpenRouter Error with {model_name}: {response.text[:150]}")
             return None
     except Exception as e:
+        print(f"⚠️ Request Failed: {e}")
         return None
+
+def get_best_free_models():
+    return [
+        "google/gemma-2-27b-it:free",               
+        "google/gemma-2-9b-it:free",                
+        "google/gemini-2.0-flash-lite-preview-02-05:free", 
+        "google/gemini-2.0-pro-exp-02-05:free",     
+        "meta-llama/llama-3.3-70b-instruct:free"    
+    ]
 
 def generate_ai_script(duration_str, style, topic, character_rules):
     try:
@@ -64,54 +72,60 @@ def generate_ai_script(duration_str, style, topic, character_rules):
         
     target_scenes = max(5, math.ceil((minutes * 60) / 3.5))
 
-    system_prompt = "You are an Elite YouTube Scriptwriter and Master Storyboard Artist. Output ONLY the story lines. DO NOT add numbers like 1., 2., 3. before the lines."
+    system_prompt = "You are a master Bollywood Storyteller and a DALL-E 3 Prompt Expert. You write highly emotional Hindi/Hinglish stories and EXTREMELY DETAILED image prompts. OUTPUT ONLY THE STORY LINES. DO NOT NUMBER THE LINES."
     
-    user_prompt = f"""Task: Write a highly engaging, emotional, and dramatic LONG-FORM YouTube story video.
+    user_prompt = f"""Task: Write a highly engaging LONG-FORM YouTube story video.
     Topic: "{topic}"
-    Duration Target: Write exactly {target_scenes} short lines of Voiceover.
+    Duration Target: EXACTLY {target_scenes} short lines of Voiceover.
     
-    🚨 THE CHARACTER BIBLE (CRITICAL RULES):
-    "{character_rules}"
-    - The OVERALL ART STYLE must be: "{style}".
+    🚨 CHARACTER BIBLE & EXTREME DETAILING (DO OR DIE):
+    Bing/DALL-E forgets characters between scenes. You MUST write HIGHLY DETAILED physical descriptions for EVERY character in EVERY prompt they appear in.
+    Character Rules: "{character_rules}"
+    Art Style: "{style}"
+    
+    - Describe their face, age, body type, exact clothing, colors, and accessories in EVERY single scene.
+    - Example: Instead of "a boy", write "a 10-year-old Indian boy with messy curly black hair, large expressive brown eyes, wearing a torn dirty oversized white shirt and blue shorts."
+    - COPY-PASTE this exact detailed description every time the character is in the frame.
     
     🚨 SCRIPT RULES:
-    1. DO NOT NUMBER THE LINES. Start directly with the story text.
-    2. MICRO-SYNC: Break the story into tiny sentences. 1 Voiceover Line = 1 Detailed Image.
+    1. NEVER NUMBER THE LINES (No 1., 2., 3.). Just write the text.
+    2. MICRO-SYNC: 1 Voiceover Line = 1 Highly Detailed Image Prompt.
     
-    FORMAT YOUR RESPONSE EXACTLY LIKE THIS (Use `|` as separator):
-    Ek samay ki baat hai, ek bhayanak jangal mein ek akela aadmi chal raha tha. | A {style} shot of a lone man resembling a young Dev Patel with a red scarf walking through a dark, foggy forest.
-    Achanak usne ek ajeeb aawaz suni. | A {style} close-up shot of the same man looking terrified.
+    FORMAT EXACTLY LIKE THIS (Use `|` as separator):
+    Ek bhayanak jangal mein ek jadui kauwa rehta tha. | A {style} shot of a sleek black crow with glowing red eyes, sharp beak, wearing a tiny glowing golden locket around its neck, sitting on a dark tree.
+    Kauwe ne ek chamakta hua paani ka matka dekha. | A {style} shot of the SAME sleek black crow with glowing red eyes, sharp beak, wearing a tiny glowing golden locket around its neck, looking greedily at a magical glowing earthen pot.
     
-    START DIRECTLY WITH THE FIRST LINE. NO INTRO. NO NUMBERS."""
+    START DIRECTLY WITH THE FIRST LINE. NO INTRO. NO OUTRO."""
     
-    active_models = ["command-a-03-2025", "command-a-plus-05-2026", "c4ai-aya-expanse-32b"]
+    models = get_best_free_models()
     
-    for model in active_models:
-        print(f"🔄 Trying model: {model} (V2 API)...")
+    for model in models:
+        print(f"🔄 Trying model: {model}...")
         for attempt in range(1, 3): 
-            text = call_cohere_api_v2(system_prompt, user_prompt, model)
+            text = call_openrouter(system_prompt, user_prompt, model)
             
             if text:
                 valid_lines = []
                 for line in text.split('\n'):
                     if '|' in line and not line.startswith('|'):
-                        # 🔴 MAGIC FIX: Ye line script se 1. 2. 3. hamesha ke liye hata degi
                         clean_line = re.sub(r'^[\d\.\-\*\s]+', '', line.strip())
                         valid_lines.append(clean_line)
                         
                 if len(valid_lines) >= 5:
-                    print(f"✅ Success! Generated {len(valid_lines)} micro-scenes/prompts using {model}.")
+                    print(f"✅ Success! Generated {len(valid_lines)} micro-scenes using {model}.")
                     return "\n".join(valid_lines)
             time.sleep(2)
             
-    print("❌ Failed to generate script. All models failed.")
+    print("❌ Failed to generate script. All OpenRouter models failed.")
     sys.exit(1)
 
 def generate_ai_metadata(topic):
     prompt = f"Topic: '{topic}'. Format EXACTLY:\nTITLE: [Clickbaity Viral Title]\nDESC: [Engaging description.]\nTAGS: [tag1, tag2]\nMUSIC: [10-word prompt for AI background music]"
-    active_models = ["command-a-03-2025", "command-a-plus-05-2026", "c4ai-aya-expanse-32b"]
-    for model in active_models:
-        text = call_cohere_api_v2("You are a YouTube SEO Expert.", prompt, model)
+    models = get_best_free_models()
+    
+    for model in models:
+        print(f"🎵 Generating Metadata using {model}...")
+        text = call_openrouter("You are a YouTube SEO Expert.", prompt, model)
         if text:
             try:
                 title = re.search(r"TITLE:\s*(.*)", text).group(1).strip()
@@ -122,6 +136,7 @@ def generate_ai_metadata(topic):
                 return title, desc, tags
             except Exception:
                 pass
+                
     with open("music_prompt.txt", "w", encoding="utf-8") as f: f.write("epic emotional cinematic storytelling background score")
     return "Amazing Story You Must Watch 🔥", "Watch this amazing story till the end!", "story, viral, trending"
 
