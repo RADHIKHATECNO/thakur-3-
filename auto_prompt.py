@@ -11,10 +11,10 @@ CHARACTER_FILE = "character.txt"
 PROMPT_FILE = "prompts.txt"
 METADATA_FILE = "metadata.txt"
 
-# OpenRouter API Key
-API_KEY = os.getenv("OPENROUTER_API_KEY")
+# BazaarLink API Key from GitHub Secrets
+API_KEY = os.getenv("BAZAAR_API_KEY")
 if not API_KEY:
-    print("❌ ERROR: OPENROUTER_API_KEY is missing in GitHub Secrets!")
+    print("❌ ERROR: BAZAAR_API_KEY is missing in GitHub Secrets!")
     sys.exit(1)
 
 def setup_files():
@@ -26,88 +26,71 @@ def setup_files():
         with open(STORY_FILE, "w", encoding="utf-8") as f:
             f.write("4 min | 3D Pixar Animation | Ek lalachi kauwa aur jadui paani ki kahani\n")
 
-def call_openrouter(system_prompt, user_prompt, model_name):
-    url = "https://openrouter.ai/api/v1/chat/completions"
+def call_bazaar_api_stream(system_prompt, user_prompt, model_name):
+    """🤖 MAGIC: BazaarLink API with LIVE Typing and Auto-Free Routing!"""
+    
+    # BazaarLink Official OpenAI-compatible endpoint
+    url = "https://api.bazaarlink.ai/v1/chat/completions"
+    
     headers = {
         "Authorization": f"Bearer {API_KEY}",
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://github.com/thakur-3", 
-        "X-Title": "YouTube Automation"
+        "Content-Type": "application/json"
     }
+    
     data = {
         "model": model_name,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
         ],
-        "temperature": 0.7
+        "temperature": 0.7,
+        "stream": True # 🔴 Live Typing On!
     }
     
+    print("\n✍️ AI is typing LIVE:\n--------------------------------------------------")
+    full_text = ""
+    
     try:
-        response = requests.post(url, headers=headers, json=data, timeout=90)
-        if response.status_code == 200:
-            res_json = response.json()
-            return res_json["choices"][0]["message"]["content"]
-        else:
-            print(f"⚠️ OpenRouter Error with {model_name}: {response.text[:150]}")
+        response = requests.post(url, headers=headers, json=data, stream=True, timeout=90)
+        
+        if response.status_code != 200:
+            print(f"\n⚠️ BazaarLink Error with {model_name}: {response.text[:150]}")
             return None
+            
+        for line in response.iter_lines():
+            if line:
+                decoded_line = line.decode('utf-8')
+                if decoded_line.startswith("data: "):
+                    json_str = decoded_line[6:]
+                    if json_str.strip() == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(json_str)
+                        content = chunk["choices"][0]["delta"].get("content", "")
+                        if content:
+                            full_text += content
+                            sys.stdout.write(content)
+                            sys.stdout.flush()
+                    except:
+                        pass
+                        
+        print("\n--------------------------------------------------\n✅ AI Finished Typing!")
+        return full_text
+        
     except Exception as e:
-        print(f"⚠️ Request Failed: {e}")
+        print(f"\n⚠️ Request Failed for {model_name}: {e}")
         return None
 
-def get_best_live_free_models():
-    """🤖 MAGIC: Live scan for the most powerful FREE models right now!"""
-    print("🔍 Scanning OpenRouter for the most powerful LIVE FREE models...")
-    try:
-        response = requests.get("https://openrouter.ai/api/v1/models", timeout=15)
-        if response.status_code == 200:
-            models_data = response.json().get("data", [])
-            free_models = []
-            
-            for m in models_data:
-                m_id = m.get("id", "")
-                pricing = m.get("pricing", {})
-                
-                # Check if model is free (Prompt & Completion price = 0)
-                try: p_prompt = float(pricing.get("prompt", 1))
-                except: p_prompt = 1
-                try: p_comp = float(pricing.get("completion", 1))
-                except: p_comp = 1
-                
-                # Ignore agentic/coding models that cause errors
-                if "thinkingmachines" in m_id.lower() or "lyria" in m_id.lower():
-                    continue
-                
-                if m_id.endswith(":free") or (p_prompt == 0.0 and p_comp == 0.0):
-                    ctx_len = m.get("context_length", 0)
-                    score = ctx_len
-                    
-                    # 💡 Rating System: Bonus points for best storytellers
-                    lower_id = m_id.lower()
-                    if "gemini-2.0" in lower_id: score += 2000000
-                    elif "gemini" in lower_id: score += 1000000
-                    elif "llama-3.3" in lower_id or "70b" in lower_id: score += 900000
-                    elif "qwen" in lower_id and "72b" in lower_id: score += 800000
-                    elif "gemma" in lower_id: score += 500000
-                    
-                    free_models.append({"id": m_id, "score": score})
-            
-            # Sort by highest score (Most powerful model first)
-            free_models.sort(key=lambda x: x["score"], reverse=True)
-            top_models = [m["id"] for m in free_models[:10]] 
-            
-            if top_models:
-                print(f"🌟 Found {len(top_models)} active Free Models! Top pick: {top_models[0]}")
-                return top_models
-    except Exception as e:
-        print(f"⚠️ Live scan failed: {e}")
-        
-    print("⚠️ Using Fallback Free Models.")
+def get_best_bazaar_models():
+    """
+    BazaarLink Docs Magic: 'auto:free' automatically finds the best 
+    available free models (DeepSeek, Qwen) and routes to them instantly!
+    """
     return [
-        "google/gemini-2.0-flash-lite-preview-02-05:free",
-        "google/gemini-2.0-pro-exp-02-05:free",
-        "meta-llama/llama-3.3-70b-instruct:free",
-        "mistralai/mistral-7b-instruct:free"
+        "auto:free",                           # 🌟 No. 1 Priority: Let BazaarLink automatically pick the best live free model
+        "deepseek/deepseek-v4-flash-0731free", # Fallback Free Model 1 (from docs)
+        "qwen/qwen3.7-flash",                  # Fallback Free Model 2 (from docs)
+        "google/gemini-2.5-flash"              # Universal Fallback
     ]
 
 def generate_ai_script(duration_str, style, topic, character_rules):
@@ -130,7 +113,6 @@ def generate_ai_script(duration_str, style, topic, character_rules):
     Art Style: "{style}"
     
     - Describe their face, age, body type, exact clothing, colors, and accessories in EVERY single scene.
-    - Example: Instead of "a boy", write "a 10-year-old Indian boy with messy curly black hair, large expressive brown eyes, wearing a torn dirty oversized white shirt and blue shorts."
     - COPY-PASTE this exact detailed description every time the character is in the frame.
     
     🚨 SCRIPT RULES:
@@ -143,37 +125,36 @@ def generate_ai_script(duration_str, style, topic, character_rules):
     
     START DIRECTLY WITH THE FIRST LINE. NO INTRO. NO OUTRO."""
     
-    models = get_best_live_free_models()
+    models = get_best_bazaar_models()
     
     for model in models:
-        print(f"🔄 Trying model: {model}...")
+        print(f"\n🔄 Trying model: {model}...")
         for attempt in range(1, 3): 
-            text = call_openrouter(system_prompt, user_prompt, model)
+            text = call_bazaar_api_stream(system_prompt, user_prompt, model)
             
             if text:
                 valid_lines = []
                 for line in text.split('\n'):
                     if '|' in line and not line.startswith('|') and not line.startswith('**'):
-                        # Regex se 1. 2. 3. numbers pakke taur par hat jayenge
                         clean_line = re.sub(r'^[\d\.\-\*\s]+', '', line.strip())
                         if len(clean_line) > 10:
                             valid_lines.append(clean_line)
                         
                 if len(valid_lines) >= 5:
-                    print(f"✅ Success! Generated {len(valid_lines)} micro-scenes using {model}.")
+                    print(f"✅ Success! Extracted {len(valid_lines)} micro-scenes from the LIVE output.")
                     return "\n".join(valid_lines)
             time.sleep(2)
             
-    print("❌ Failed to generate script. All OpenRouter models failed.")
+    print("❌ Failed to generate script. All BazaarLink models failed.")
     sys.exit(1)
 
 def generate_ai_metadata(topic):
     prompt = f"Topic: '{topic}'. Format EXACTLY:\nTITLE: [Clickbaity Viral Title]\nDESC: [Engaging description.]\nTAGS: [tag1, tag2]\nMUSIC: [10-word prompt for AI background music]"
-    models = get_best_live_free_models()
+    models = get_best_bazaar_models()
     
-    for model in models[:5]: # Try top 5 for metadata
-        print(f"🎵 Generating Metadata using {model}...")
-        text = call_openrouter("You are a YouTube SEO Expert.", prompt, model)
+    for model in models[:3]:
+        print(f"\n🎵 Generating Metadata using {model}...")
+        text = call_bazaar_api_stream("You are a YouTube SEO Expert.", prompt, model)
         if text:
             try:
                 title = re.search(r"TITLE:\s*(.*)", text).group(1).strip()
@@ -211,6 +192,6 @@ def main():
     title, desc, tags = generate_ai_metadata(topic)
     with open(METADATA_FILE, "w", encoding="utf-8") as f: f.write(f"TITLE: {title}\nDESC: {desc}\nTAGS: {tags}")
     with open(STORY_FILE, "w", encoding="utf-8") as f: f.write("\n".join(stories[1:]) + "\n" if len(stories) > 1 else "")
-    print("🚀 Auto Prompt Stage Completed Successfully!")
+    print("\n🚀 Auto Prompt Stage Completed Successfully!")
 
 if __name__ == "__main__": main()
