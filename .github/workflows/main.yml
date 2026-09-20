@@ -24,10 +24,11 @@ jobs:
     - name: Install Dependencies
       run: pip install openai requests mutagen
         
-    - name: Generate AI Prompts (Cohere API)
+    # YAHAN OPENROUTER WAPAS LAGA DIYA HAI
+    - name: Generate AI Prompts (OpenRouter)
       run: python auto_prompt.py
       env:
-        COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 
     - name: Generate Voiceover (ElevenLabs)
       run: python generate_audio.py
