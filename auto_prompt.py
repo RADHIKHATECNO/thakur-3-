@@ -3,24 +3,23 @@ import sys
 import re
 import math
 import time
-from openai import OpenAI
+import requests
+import json
 
 STORY_FILE = "story.txt"
 CHARACTER_FILE = "character.txt"
 PROMPT_FILE = "prompts.txt"
 METADATA_FILE = "metadata.txt"
 
-# 🔴 GitHub Secrets me ab KIE_API_KEY daalni hogi
+# KIE API Key
 API_KEY = os.getenv("KIE_API_KEY")
 if not API_KEY:
     print("❌ ERROR: KIE_API_KEY is missing in GitHub Secrets!")
     sys.exit(1)
 
-# KIE API setup (OpenAI compatible endpoint)
-BASE_URL = "https://api.kie.ai/v1" 
+# API Endpoint setup
+API_URL = "https://api.kie.ai/v1/chat/completions"
 MODEL_NAME = "gpt-6-astra"
-
-client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
 
 def setup_files():
     if not os.path.exists(CHARACTER_FILE):
@@ -29,8 +28,35 @@ def setup_files():
     
     if not os.path.exists(STORY_FILE):
         with open(STORY_FILE, "w", encoding="utf-8") as f:
-            f.write("3 min | Cinematic | Ek lalachii kauwa aur jadui paani\n")
+            f.write("4 min | 3D Pixar Animation | Ek lalachi kauwa aur jadui paani ki kahani\n")
             
+def call_kie_api(system_prompt, user_prompt):
+    headers = {
+        "Authorization": f"Bearer {API_KEY}",
+        "Content-Type": "application/json"
+    }
+    data = {
+        "model": MODEL_NAME,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        "temperature": 0.7
+    }
+    
+    response = requests.post(API_URL, headers=headers, json=data)
+    
+    if response.status_code == 200:
+        res_json = response.json()
+        try:
+            return res_json['choices'][0]['message']['content']
+        except Exception as e:
+            print(f"⚠️ JSON Parse Error: {e}. Raw Response: {response.text}")
+            return None
+    else:
+        print(f"⚠️ KIE API Error ({response.status_code}): {response.text}")
+        return None
+
 def generate_ai_script(duration_str, style, topic, character_rules):
     try:
         minutes = int(re.search(r'\d+', duration_str).group())
@@ -61,27 +87,20 @@ def generate_ai_script(duration_str, style, topic, character_rules):
     
     START DIRECTLY WITH LINE 1. NO INTRO. NO OUTRO. EXACTLY {target_scenes} LINES."""
     
-    max_attempts = 3 # Astra bahut smart hai, 3 try kaafi hain
+    max_attempts = 3 
     
     for attempt in range(1, max_attempts + 1):
-        try:
-            print(f"🔄 Attempt {attempt}: Generating Story with KIE API ({MODEL_NAME})...")
-            response = client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
-                temperature=0.7
-            )
-            text = response.choices[0].message.content
-            
+        print(f"🔄 Attempt {attempt}: Generating Story with KIE API ({MODEL_NAME})...")
+        text = call_kie_api(system_prompt, user_prompt)
+        
+        if text:
             valid_lines = [line.strip() for line in text.split('\n') if '|' in line and not line.startswith('|')]
             if len(valid_lines) >= 5:
                 print(f"✅ Success! Generated {len(valid_lines)} micro-scenes/prompts from gpt-6-astra.")
                 return "\n".join(valid_lines)
             else:
-                print(f"⚠️ Formatting error. Retrying...")
-        except Exception as e:
-            print(f"⚠️ API Error: {str(e)[:100]}...")
-            time.sleep(2)
+                print(f"⚠️ Bad Formatting. AI Output: {text[:100]}... Retrying!")
+        time.sleep(2)
             
     print("❌ Failed to generate script after 3 attempts.")
     sys.exit(1)
@@ -95,16 +114,11 @@ def generate_ai_metadata(topic):
     TAGS: [comma separated top 10 SEO tags]
     MUSIC: [10-word prompt for AI background music, e.g., 'epic sad cinematic emotional']"""
     
-    for _ in range(3):
+    print(f"🎵 Generating Metadata using {MODEL_NAME}...")
+    text = call_kie_api("You are a YouTube SEO Expert.", prompt)
+    
+    if text:
         try:
-            print(f"🎵 Generating Metadata using {MODEL_NAME}...")
-            response = client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=[{"role": "system", "content": "You are a YouTube SEO Expert."}, {"role": "user", "content": prompt}],
-                temperature=0.7
-            )
-            text = response.choices[0].message.content
-            
             title = re.search(r"TITLE:\s*(.*)", text).group(1).strip()
             desc = re.search(r"DESC:\s*([\s\S]*?)TAGS:", text).group(1).strip()
             tags = re.search(r"TAGS:\s*(.*)", text).group(1).strip()
@@ -112,9 +126,10 @@ def generate_ai_metadata(topic):
             
             with open("music_prompt.txt", "w", encoding="utf-8") as f: f.write(music)
             return title, desc, tags
-        except:
-            time.sleep(1)
+        except Exception as e:
+            print(f"⚠️ Failed to parse metadata text: {e}")
             
+    # Default Fallback
     with open("music_prompt.txt", "w", encoding="utf-8") as f: f.write("epic emotional cinematic storytelling background score")
     return "Amazing Story You Must Watch 🔥", "Watch this amazing story till the end!", "story, viral, trending"
 
