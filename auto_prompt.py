@@ -11,7 +11,6 @@ CHARACTER_FILE = "character.txt"
 PROMPT_FILE = "prompts.txt"
 METADATA_FILE = "metadata.txt"
 
-# KIE API Key
 API_KEY = os.getenv("KIE_API_KEY")
 if not API_KEY:
     print("❌ ERROR: KIE_API_KEY is missing in GitHub Secrets!")
@@ -30,11 +29,10 @@ def setup_files():
             f.write("4 min | 3D Pixar Animation | Ek lalachi kauwa aur jadui paani ki kahani\n")
             
 def call_kie_api(system_prompt, user_prompt):
-    # User-Agent add kiya hai taaki Cloudflare/Security block na kare
     headers = {
         "Authorization": f"Bearer {API_KEY}",
         "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "User-Agent": "Mozilla/5.0"
     }
     
     full_prompt = f"{system_prompt}\n\n{user_prompt}"
@@ -58,32 +56,48 @@ def call_kie_api(system_prompt, user_prompt):
     }
     
     try:
-        response = requests.post(API_URL, headers=headers, json=data, timeout=120)
+        # Stream=True allows us to read chunk by chunk just like ChatGPT types it
+        response = requests.post(API_URL, headers=headers, json=data, stream=True, timeout=120)
         
-        # Safe JSON parsing
-        try:
-            res_json = response.json()
-        except Exception:
-            print(f"⚠️ API did not return JSON. Status Code: {response.status_code}")
-            print(f"⚠️ RAW RESPONSE (First 500 chars): {response.text[:500]}")
+        if response.status_code != 200:
+            print(f"⚠️ KIE API Error ({response.status_code}): {response.text}")
             return None
             
-        if response.status_code == 200:
-            try:
-                outputs = res_json.get('output', [])
-                for item in outputs:
-                    if item.get('type') == 'message':
-                        contents = item.get('content', [])
-                        for content_item in contents:
-                            if content_item.get('type') == 'output_text':
-                                return content_item.get('text')
-                print(f"⚠️ Structure mismatch. KIE returned: {res_json}")
-                return None
-            except Exception as e:
-                print(f"⚠️ Data extraction error: {e}")
-                return None
+        collected_text = ""
+        
+        for line in response.iter_lines():
+            if line:
+                decoded = line.decode('utf-8')
+                if decoded.startswith("data: "):
+                    data_str = decoded[6:].strip()
+                    if not data_str or data_str == "[DONE]":
+                        continue
+                        
+                    try:
+                        chunk = json.loads(data_str)
+                        
+                        # Type 1: Final Completed Object
+                        if chunk.get("type") == "response.done":
+                            outputs = chunk.get("response", {}).get("output", [])
+                            for item in outputs:
+                                if item.get("type") == "message":
+                                    for content in item.get("content", []):
+                                        if content.get("type") == "output_text":
+                                            return content.get("text")
+                        
+                        # Type 2: Streaming Deltas (If final object is missing)
+                        if chunk.get("type") == "response.text.delta":
+                            collected_text += chunk.get("delta", "")
+                        elif "delta" in chunk and isinstance(chunk["delta"], dict) and "text" in chunk["delta"]:
+                            collected_text += chunk["delta"]["text"]
+                            
+                    except Exception:
+                        pass
+        
+        if collected_text:
+            return collected_text
         else:
-            print(f"⚠️ KIE API Error ({response.status_code}): {res_json}")
+            print("⚠️ Stream completed but no text found.")
             return None
             
     except Exception as e:
@@ -132,7 +146,7 @@ def generate_ai_script(duration_str, style, topic, character_rules):
                 print(f"✅ Success! Generated {len(valid_lines)} micro-scenes/prompts.")
                 return "\n".join(valid_lines)
             else:
-                print(f"⚠️ AI did not follow format. Snippet: {text[:100]}... Retrying!")
+                print(f"⚠️ AI output format mismatch. Retrying!")
         time.sleep(3)
             
     print("❌ Failed to generate script after 3 attempts.")
