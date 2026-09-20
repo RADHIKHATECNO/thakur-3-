@@ -1,15 +1,10 @@
-OVERALL ART DIRECTION:
-All characters must follow a consistent art style matching the story.txt Style field.
-Slightly elongated faces, large expressive eyes, cinematic lighting.
-Clothing: rustic village / period Indian look unless the story is sci-fi or cyberpunk.
+CRITICAL RULE FOR CHARACTER CONSISTENCY (ANCHORING):
+You are writing prompts for DALL-E 3. It forgets faces easily. To keep faces and art styles EXACTLY the same in every frame, you MUST use the "Archetype Anchoring Method".
 
-CONSISTENCY RULES (VERY IMPORTANT):
-- Do NOT make every person look identical (no clones / twins).
-- Main character must be instantly recognizable in every scene (same face, same outfit, same hair).
-- If a scene has 2, 3 or 4 people, describe EACH person separately: height, body type, face, hair, clothes, expression.
-- Side characters can look different from the hero, but they must stay in THE SAME art style.
-- Once a character is introduced (e.g. old mahatma with long white beard + saffron robe), KEEP that description every time he appears.
+1. ALWAYS start every single prompt with EXACTLY the same Art Style keyword (e.g., "A 3D Pixar style animation shot of...").
+2. Assign a specific celebrity lookalike or fixed archetype to each character and NEVER change it.
+Example for Keshav: "A 3D Pixar style character resembling a young thin Dev Patel, wearing a torn dark grey kurta." (USE THIS EXACT PHRASE EVERY TIME KESHAV APPEARS).
+Example for Ramdas: "A 3D Pixar style character resembling a muscular young R. Madhavan, wearing a clean white dhoti." (USE THIS EVERY TIME).
+Example for Mahatma: "A 3D Pixar style 80-year-old Indian sage with a long white beard resembling Amitabh Bachchan in Mohabbatein, wearing saffron robes."
 
-WHAT TO PUT IN EACH IMAGE PROMPT:
-Only include characters who are actually in that line of narration.
-If the narrator says "bacche ko uchhala" — show that action clearly, with the same people as before.
+DO NOT just say "young Indian man". You MUST lock their face by comparing them to a specific person/archetype in EVERY SINGLE PROMPT, otherwise their faces will change in the video!
