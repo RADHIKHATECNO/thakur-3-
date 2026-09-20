@@ -24,14 +24,14 @@ jobs:
     - name: Install Dependencies
       run: pip install openai requests mutagen
         
-    # YAHAN OPENROUTER WAPAS LAGA DIYA HAI
+    # YAHAN OPENROUTER + LIVE LOGS (-u) SET HAIN
     - name: Generate AI Prompts (OpenRouter)
-      run: python auto_prompt.py
+      run: python -u auto_prompt.py
       env:
         OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 
     - name: Generate Voiceover (ElevenLabs)
-      run: python generate_audio.py
+      run: python -u generate_audio.py
       
     - name: Commit updated txt files
       run: |
@@ -91,7 +91,7 @@ jobs:
       env:
         BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         CHAT_ID: ${{ secrets.CHAT_ID }}
-      run: python generate_image.py ${{ matrix.machine_id }}
+      run: python -u generate_image.py ${{ matrix.machine_id }}
       
     - uses: actions/upload-artifact@v4
       with:
@@ -126,10 +126,10 @@ jobs:
         merge-multiple: true
 
     - name: Generate Local AI BGM Loop
-      run: python generate_music.py
+      run: python -u generate_music.py
         
     - name: Master Assembly (Sync Audio, Images & Ken Burns)
-      run: python process_videos.py
+      run: python -u process_videos.py
       
     - uses: actions/upload-artifact@v4
       with:
@@ -139,4 +139,4 @@ jobs:
     - name: Auto Upload to YouTube
       env:
         YOUTUBE_TOKEN_BASE64: ${{ secrets.YOUTUBE_TOKEN_BASE64 }}
-      run: python upload_youtube.py
+      run: python -u upload_youtube.py
