@@ -1,0 +1,26 @@
+{
+  "1": {
+    "voice_path": "scene_voices/voice_1.mp3",
+    "duration_sec": 12.38
+  },
+  "2": {
+    "voice_path": "scene_voices/voice_2.mp3",
+    "duration_sec": 11.3
+  },
+  "3": {
+    "voice_path": "scene_voices/voice_3.mp3",
+    "duration_sec": 10.8
+  },
+  "4": {
+    "voice_path": "scene_voices/voice_4.mp3",
+    "duration_sec": 10.73
+  },
+  "5": {
+    "voice_path": "scene_voices/voice_5.mp3",
+    "duration_sec": 10.87
+  },
+  "6": {
+    "voice_path": "scene_voices/voice_6.mp3",
+    "duration_sec": 12.91
+  }
+}
