@@ -1,0 +1,15 @@
+OVERALL ART DIRECTION:
+All characters must follow a consistent art style matching the story.txt Style field.
+Slightly elongated faces, large expressive eyes, cinematic lighting.
+Clothing: rustic village / period Indian look unless the story is sci-fi or cyberpunk.
+
+CONSISTENCY RULES (VERY IMPORTANT):
+- Do NOT make every person look identical (no clones / twins).
+- Main character must be instantly recognizable in every scene (same face, same outfit, same hair).
+- If a scene has 2, 3 or 4 people, describe EACH person separately: height, body type, face, hair, clothes, expression.
+- Side characters can look different from the hero, but they must stay in THE SAME art style.
+- Once a character is introduced (e.g. old mahatma with long white beard + saffron robe), KEEP that description every time he appears.
+
+WHAT TO PUT IN EACH IMAGE PROMPT:
+Only include characters who are actually in that line of narration.
+If the narrator says "bacche ko uchhala" — show that action clearly, with the same people as before.
