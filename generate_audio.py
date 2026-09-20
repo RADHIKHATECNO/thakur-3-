@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import requests
+import re
 from mutagen.mp3 import MP3
 
 PROMPT_FILE = "prompts.txt"
@@ -13,12 +14,16 @@ def generate_voiceover():
         print(f"❌ {PROMPT_FILE} not found!")
         sys.exit(1)
 
-    # 1. Text read karna
+    # 1. Text read karna aur DOUBLE SAFETY ke liye Numbers delete karna
     lines = []
     with open(PROMPT_FILE, "r", encoding="utf-8") as f:
         for line in f:
             if "|" in line:
-                lines.append(line.split("|")[0].strip())
+                # Sirf Voiceover wali line nikalna
+                vo_line = line.split("|")[0].strip()
+                # Agar galti se 1. 2. reh gaya ho, to yahan se bhi hatega
+                vo_line = re.sub(r'^[\d\.\-\*\s]+', '', vo_line)
+                lines.append(vo_line)
                 
     if not lines:
         print("❌ No voiceover text found!")
@@ -27,9 +32,12 @@ def generate_voiceover():
     full_text = " ".join(lines)
     print(f"🎙️ Text sending to ElevenLabs (Chars: {len(full_text)})...")
 
-    # 🔴 Bhai ka diya hua working logic aur API key
+    # 🔴 YAHAN APNI ELEVENLABS KI API KEY DAALEIN
     API_KEY = "sk_1ecaa2d5885b536edb08427096f606a9fd1d89fe51a9d90f"
-    VOICE_ID = "nPczCjzI2devNBz1zQrb" 
+    
+    # 🔴 YAHAN APNI PASAND KI VOICE ID DAALEIN
+    # (Abhi maine 'Adam' ki ID dali hai jo storytelling ke liye bahut acchi hai)
+    VOICE_ID = "eyVoIoi3vo6sJoHOKgAc" 
     
     url = f"https://api.elevenlabs.io/v1/text-to-speech/{VOICE_ID}"
     headers = {
