@@ -22,30 +22,39 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: Install Dependencies
-      run: pip install openai requests
+    - name: Install Script Dependencies
+      run: |
+        pip install openai requests
 
     - name: Generate AI Script + Metadata
       run: python auto_prompt.py
       env:
         OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 
-    - name: Generate Hindi Voice (ElevenLabs)
+    - name: Install Kokoro TTS Dependencies
+      run: |
+        sudo apt-get update && sudo apt-get install -y ffmpeg
+        pip install \
+          kokoro-onnx \
+          soundfile \
+          numpy \
+          indic-transliteration \
+          requests
+
+    - name: Generate Hindi Voice (Kokoro TTS - FREE)
       run: python generate_voice.py
-      env:
-        ELEVENLABS_API_KEY_1: ${{ secrets.ELEVENLABS_API_KEY_1 }}
-        ELEVENLABS_API_KEY_2: ${{ secrets.ELEVENLABS_API_KEY_2 }}
-        ELEVENLABS_API_KEY_3: ${{ secrets.ELEVENLABS_API_KEY_3 }}
-        ELEVENLABS_API_KEY_4: ${{ secrets.ELEVENLABS_API_KEY_4 }}
-        ELEVENLABS_API_KEY_5: ${{ secrets.ELEVENLABS_API_KEY_5 }}
-        ELEVENLABS_API_KEY_6: ${{ secrets.ELEVENLABS_API_KEY_6 }}
-        ELEVENLABS_VOICE_ID:  ${{ secrets.ELEVENLABS_VOICE_ID }}
 
     - name: Commit Updated Files
       run: |
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
-        git add story.txt prompts.txt metadata.txt music_prompt.txt video_config.json timing_map.json
+        git add \
+          story.txt \
+          prompts.txt \
+          metadata.txt \
+          music_prompt.txt \
+          video_config.json \
+          timing_map.json || true
         git commit -m "Auto: Script + Voice generated" || echo "No changes"
         git push
 
@@ -60,16 +69,22 @@ jobs:
           video_config.json
           timing_map.json
           scene_voices/
+          kokoro-v0_19.onnx
+          voices.bin
 
     - id: set-matrix
       run: |
         count=$(grep -c '^' prompts.txt || echo 0)
-        if [ "$count" -eq 0 ]; then exit 1; fi
+        if [ "$count" -eq 0 ]; then
+          echo "❌ prompts.txt empty!"
+          exit 1
+        fi
         matrix_json=$(python3 -c "
         import json
         print(json.dumps(list(range(1, $count + 1))))
         ")
         echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
+        echo "✅ Matrix set: $matrix_json"
 
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -103,6 +118,12 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: stage1-files
+
+    - name: Fix Folder Structure
+      run: |
+        mkdir -p scene_voices
+        mkdir -p scene_images
+        ls -la
 
     - name: Generate Image (Bing AI)
       run: python generate_image.py ${{ matrix.machine_id }}
@@ -152,6 +173,13 @@ jobs:
         name: image_machine_${{ matrix.machine_id }}
         path: scene_images/
 
+    - name: Fix Folder Structure
+      run: |
+        mkdir -p scene_voices
+        mkdir -p scene_images
+        mkdir -p generated_videos
+        ls -la
+
     - name: Generate Video (Upsampler AI)
       run: python generate_video.py ${{ matrix.machine_id }}
       env:
@@ -178,9 +206,11 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: Install Dependencies
+    - name: Install All Dependencies
       run: |
-        sudo apt-get update && sudo apt-get install -y ffmpeg zip
+        sudo apt-get update && sudo apt-get install -y \
+          ffmpeg \
+          zip
         pip install \
           google-api-python-client \
           google-auth-httplib2 \
@@ -188,7 +218,9 @@ jobs:
           requests \
           transformers \
           torch \
-          scipy
+          scipy \
+          soundfile \
+          numpy
 
     - name: Download Stage 1 Files
       uses: actions/download-artifact@v4
@@ -201,6 +233,18 @@ jobs:
         path: generated_videos/
         pattern: video_machine_*
         merge-multiple: true
+
+    - name: Fix Folder Structure
+      run: |
+        mkdir -p scene_voices
+        mkdir -p scene_images
+        mkdir -p generated_videos
+        mkdir -p final_output
+        ls -la
+        echo "--- generated_videos ---"
+        ls -la generated_videos/ || echo "Empty"
+        echo "--- scene_voices ---"
+        ls -la scene_voices/ || echo "Empty"
 
     - name: Download Random Outro
       run: python download_outro.py
@@ -234,8 +278,18 @@ jobs:
       with:
         name: Ready_To_Download_Video
         path: Final_Package.zip
+        retention-days: 7
 
     - name: Auto Upload to YouTube
       run: python upload_youtube.py
       env:
         YOUTUBE_TOKEN_BASE64: ${{ secrets.YOUTUBE_TOKEN_BASE64 }}
+
+    - name: Send Final Notification
+      if: always()
+      run: |
+        if [ -f "final_output/Final_4K_Monetizable_Short.mp4" ]; then
+          echo "✅ Pipeline Complete! Video ready."
+        else
+          echo "❌ Pipeline failed! Check logs."
+        fi
