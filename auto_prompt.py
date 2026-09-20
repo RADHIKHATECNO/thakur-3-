@@ -13,7 +13,7 @@ METADATA_FILE = "metadata.txt"
 
 API_KEY = os.getenv("OPENROUTER_API_KEY")
 if not API_KEY:
-    print("❌ ERROR: OPENROUTER_API_KEY is missing!")
+    print("❌ ERROR: OPENROUTER_API_KEY is missing in GitHub Secrets!")
     sys.exit(1)
 
 client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=API_KEY)
@@ -43,12 +43,11 @@ def generate_ai_script(format_type, duration_sec, topic):
     target_scenes = max(3, math.ceil(int(duration_sec) / 4))
     system_prompt = "You are a Master Visual Storyteller and Comedy Writer. Output strictly in the requested format."
     
-    # 🔴 यह सबसे इम्पोर्टेन्ट हिस्सा है जहाँ AI को 3 हिस्सों का फॉर्मेट बताया गया है
     user_prompt = f"""Task: Create a highly engaging, FUNNY, and HAPPY YouTube {format_type} story about: "{topic}".
     Total Scenes: EXACTLY {target_scenes}.
 
     🚨 STRICT RULES (CRITICAL):
-    1. NO FEAR, NO SADNESS, NO HORROR. Only Comedy, Hardwork, Happiness.
+    1. NO FEAR, NO SADNESS. Only Comedy, Happiness.
     2. THE HOOK: The VERY FIRST dialogue must be super funny or shocking.
     3. DIALOGUE LENGTH: Each dialogue must be short (maximum 10-15 words).
 
@@ -68,7 +67,7 @@ def generate_ai_script(format_type, duration_sec, topic):
     for model_name in models:
         for _ in range(2): 
             if attempt > max_attempts:
-                print("❌ ERROR: 10 attempts हो गए। Exiting.")
+                print("❌ ERROR: AI failed 10 attempts to give correct format.")
                 return None
                 
             print(f"🔄 Attempt {attempt}/{max_attempts} - Trying model: {model_name}...")
@@ -81,16 +80,17 @@ def generate_ai_script(format_type, duration_sec, topic):
                 text = response.choices[0].message.content
                 
                 if text:
+                    print(f"--- AI Raw Output ---\n{text}\n---------------------")
                     valid_lines = []
                     for line in text.split('\n'):
                         line = line.strip()
                         line = re.sub(r'^[\d\.\-\*\s]+', '', line)
-                        # 🔴 चेक करेगा कि लाइन में 2 बार '|' है या नहीं
-                        if line.count('|') == 2:
+                        # 🔴 FIX: कम से कम 2 बार '|' होना चाहिए
+                        if line.count('|') >= 2:
                             valid_lines.append(line)
                             
                     if len(valid_lines) > 0:
-                        print(f"✅ Success! {len(valid_lines)} valid scenes found from {model_name}.")
+                        print(f"✅ Success! {len(valid_lines)} valid scenes found.")
                         return "\n".join(valid_lines[:target_scenes])
                     else:
                         print(f"⚠️ AI ने फॉर्मेट गलत दिया (3 Parts नहीं मिले). Retrying...")
@@ -102,21 +102,11 @@ def generate_ai_script(format_type, duration_sec, topic):
 
 def generate_ai_metadata(topic, format_type):
     tag_style = "#shorts, #trending, #comedy" if format_type == "SHORT" else "funny story, moral story, comedy video, entertaining"
-    system_prompt = "You are a highly creative YouTube SEO Expert."
-    user_prompt = f"""Story Topic: '{topic}'. Format: {format_type}.
-    Format EXACTLY like this:
-    TITLE: [Viral Title]
-    DESC: [Description]
-    TAGS: [tag1, tag2, tag3]"""
-    
+    prompt = f"Topic: '{topic}'. Format: {format_type}.\nFormat EXACTLY:\nTITLE: [Title]\nDESC: [Desc]\nTAGS: [tag1, tag2]"
     models = get_live_free_models()
     for model_name in models[:3]:
         try:
-            response = client.chat.completions.create(
-                model=model_name,
-                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
-                temperature=0.8
-            )
+            response = client.chat.completions.create(model=model_name, messages=[{"role": "user", "content": prompt}])
             text = response.choices[0].message.content
             title = re.search(r"TITLE:\s*(.*)", text).group(1).strip()
             desc = re.search(r"DESC:\s*([\s\S]*?)TAGS:", text).group(1).strip()
@@ -124,15 +114,16 @@ def generate_ai_metadata(topic, format_type):
             return title, desc, tags
         except:
             time.sleep(1)
-            
     return f"Funny Story about {topic} 😂", "Watch this amazing funny story!", tag_style
 
 def process_stories():
     if not os.path.exists(STORY_FILE):
+        print(f"❌ ERROR: {STORY_FILE} (story.txt) file not found in the main folder!")
         sys.exit(1)
         
     with open(STORY_FILE, "r", encoding="utf-8") as f: content = f.read().strip()
     if not content:
+        print(f"❌ ERROR: {STORY_FILE} (story.txt) is completely empty! Please write a topic inside it.")
         sys.exit(1)
         
     topics = [t.strip() for t in content.split("\n") if t.strip()]
@@ -141,10 +132,12 @@ def process_stories():
     duration_sec = int(parts[1].strip()) if len(parts) > 1 else 30
     topic = parts[2].strip() if len(parts) > 2 else topics[0]
     
+    print(f"🎬 Processing: Format={format_type}, Time={duration_sec}s, Topic={topic}")
     with open("video_format.txt", "w") as f: f.write(format_type)
 
     ai_output = generate_ai_script(format_type, duration_sec, topic)
     if not ai_output:
+        print("❌ ERROR: Could not generate valid AI script. Exiting.")
         sys.exit(1)
         
     with open(PROMPT_FILE, "w", encoding="utf-8") as f: f.write(ai_output + "\n")
