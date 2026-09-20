@@ -25,7 +25,7 @@ def setup_files():
         with open(STORY_FILE, "w", encoding="utf-8") as f:
             f.write("4 min | 3D Pixar Animation | Ek lalachi kauwa aur jadui paani ki kahani\n")
             
-def call_cohere_api(system_prompt, user_prompt):
+def call_cohere_api(system_prompt, user_prompt, model_name):
     url = "https://api.cohere.ai/v1/chat"
     
     headers = {
@@ -34,8 +34,8 @@ def call_cohere_api(system_prompt, user_prompt):
     }
     
     data = {
-        "model": "command-r",  # Cohere ka best storytelling model
-        "preamble": system_prompt, # Cohere me System Prompt ko Preamble bolte hain
+        "model": model_name,
+        "preamble": system_prompt,
         "message": user_prompt,
         "temperature": 0.7
     }
@@ -47,7 +47,7 @@ def call_cohere_api(system_prompt, user_prompt):
             res_json = response.json()
             return res_json.get("text")
         else:
-            print(f"⚠️ Cohere API Error ({response.status_code}): {response.text}")
+            print(f"⚠️ Cohere API Error with {model_name} ({response.status_code}): {response.text}")
             return None
             
     except Exception as e:
@@ -62,7 +62,7 @@ def generate_ai_script(duration_str, style, topic, character_rules):
         
     target_scenes = max(5, math.ceil((minutes * 60) / 3.5))
 
-    system_prompt = "You are an Elite YouTube Scriptwriter and Master Storyboard Artist. You MUST follow instructions strictly and output exactly what is asked."
+    system_prompt = "You are an Elite YouTube Scriptwriter and Master Storyboard Artist. You MUST follow instructions strictly."
     
     user_prompt = f"""Task: Write a highly engaging, emotional, and dramatic LONG-FORM YouTube story video.
     Topic: "{topic}"
@@ -84,22 +84,24 @@ def generate_ai_script(duration_str, style, topic, character_rules):
     
     START DIRECTLY WITH LINE 1. NO INTRO. NO OUTRO. EXACTLY {target_scenes} LINES."""
     
-    max_attempts = 3 
+    # Naye aur active Cohere models ki list
+    active_models = ["command-r-plus", "command", "command-light"]
     
-    for attempt in range(1, max_attempts + 1):
-        print(f"🔄 Attempt {attempt}: Generating Story with Cohere API (command-r)...")
-        text = call_cohere_api(system_prompt, user_prompt)
-        
-        if text:
-            valid_lines = [line.strip() for line in text.split('\n') if '|' in line and not line.startswith('|')]
-            if len(valid_lines) >= 5:
-                print(f"✅ Success! Generated {len(valid_lines)} micro-scenes/prompts.")
-                return "\n".join(valid_lines)
-            else:
-                print(f"⚠️ AI did not follow format. Snippet: {text[:100]}... Retrying!")
-        time.sleep(3)
+    for model in active_models:
+        print(f"🔄 Trying model: {model}...")
+        for attempt in range(1, 3): # Har model ko 2 baar try karega
+            text = call_cohere_api(system_prompt, user_prompt, model)
             
-    print("❌ Failed to generate script after 3 attempts.")
+            if text:
+                valid_lines = [line.strip() for line in text.split('\n') if '|' in line and not line.startswith('|')]
+                if len(valid_lines) >= 5:
+                    print(f"✅ Success! Generated {len(valid_lines)} micro-scenes/prompts using {model}.")
+                    return "\n".join(valid_lines)
+                else:
+                    print(f"⚠️ Bad formatting. Retrying with {model}...")
+            time.sleep(2)
+            
+    print("❌ Failed to generate script. All models failed.")
     sys.exit(1)
 
 def generate_ai_metadata(topic):
@@ -111,20 +113,23 @@ def generate_ai_metadata(topic):
     TAGS: [comma separated top 10 SEO tags]
     MUSIC: [10-word prompt for AI background music, e.g., 'epic sad cinematic emotional']"""
     
-    print(f"🎵 Generating Metadata using Cohere...")
-    text = call_cohere_api("You are a YouTube SEO Expert. Only output the requested format.", prompt)
+    active_models = ["command-r-plus", "command", "command-light"]
     
-    if text:
-        try:
-            title = re.search(r"TITLE:\s*(.*)", text).group(1).strip()
-            desc = re.search(r"DESC:\s*([\s\S]*?)TAGS:", text).group(1).strip()
-            tags = re.search(r"TAGS:\s*(.*)", text).group(1).strip()
-            music = re.search(r"MUSIC:\s*(.*)", text).group(1).strip()
-            
-            with open("music_prompt.txt", "w", encoding="utf-8") as f: f.write(music)
-            return title, desc, tags
-        except Exception:
-            pass
+    for model in active_models:
+        print(f"🎵 Generating Metadata using {model}...")
+        text = call_cohere_api("You are a YouTube SEO Expert.", prompt, model)
+        
+        if text:
+            try:
+                title = re.search(r"TITLE:\s*(.*)", text).group(1).strip()
+                desc = re.search(r"DESC:\s*([\s\S]*?)TAGS:", text).group(1).strip()
+                tags = re.search(r"TAGS:\s*(.*)", text).group(1).strip()
+                music = re.search(r"MUSIC:\s*(.*)", text).group(1).strip()
+                
+                with open("music_prompt.txt", "w", encoding="utf-8") as f: f.write(music)
+                return title, desc, tags
+            except Exception:
+                pass
             
     with open("music_prompt.txt", "w", encoding="utf-8") as f: f.write("epic emotional cinematic storytelling background score")
     return "Amazing Story You Must Watch 🔥", "Watch this amazing story till the end!", "story, viral, trending"
