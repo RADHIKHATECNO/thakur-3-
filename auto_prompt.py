@@ -3,8 +3,6 @@ import sys
 import re
 import math
 import time
-import urllib.request
-import json
 from openai import OpenAI
 
 STORY_FILE = "story.txt"
@@ -12,53 +10,26 @@ CHARACTER_FILE = "character.txt"
 PROMPT_FILE = "prompts.txt"
 METADATA_FILE = "metadata.txt"
 
-API_KEY = os.getenv("OPENROUTER_API_KEY")
+# 🔴 GitHub Secrets me ab KIE_API_KEY daalni hogi
+API_KEY = os.getenv("KIE_API_KEY")
 if not API_KEY:
-    print("❌ ERROR: OPENROUTER_API_KEY is missing!")
+    print("❌ ERROR: KIE_API_KEY is missing in GitHub Secrets!")
     sys.exit(1)
 
-client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=API_KEY)
+# KIE API setup (OpenAI compatible endpoint)
+BASE_URL = "https://api.kie.ai/v1" 
+MODEL_NAME = "gpt-6-astra"
 
-def get_live_free_models():
-    """Bhai ka Original Logic: Jo live check karega ki konsa model abhi FREE hai"""
-    models_list = []
-    try:
-        req = urllib.request.Request("https://openrouter.ai/api/v1/models")
-        with urllib.request.urlopen(req) as response:
-            data = json.loads(response.read().decode('utf-8'))
-        # Live free models filter
-        models_list = [
-            m["id"] for m in data.get("data", []) 
-            if m.get("pricing", {}).get("prompt") == "0" 
-            and m.get("pricing", {}).get("completion") == "0"
-        ]
-        print(f"🌐 Found {len(models_list)} Live Free Models from OpenRouter API.")
-    except Exception as e:
-        print(f"⚠️ Failed to fetch live models from API: {e}")
-        
-    # Guaranteed Fallbacks (Agar API fail ho jaye)
-    fallbacks = [
-        "google/gemini-2.0-flash-exp:free",
-        "google/gemini-2.0-pro-exp-02-05:free",
-        "sophosympatheia/rogue-rose-103b-v0.2:free",
-        "qwen/qwen-vl-plus:free",
-        "mistralai/mistral-7b-instruct:free"
-    ]
-    
-    for fb in fallbacks:
-        if fb not in models_list:
-            models_list.append(fb)
-            
-    return models_list
+client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
 
 def setup_files():
     if not os.path.exists(CHARACTER_FILE):
         with open(CHARACTER_FILE, "w", encoding="utf-8") as f:
-            f.write("All characters should look realistic and cinematic. Wear ancient Indian style clothes. Ensure the style is consistent.")
+            f.write("All characters should look realistic and cinematic. Ensure the style is consistent.")
     
     if not os.path.exists(STORY_FILE):
         with open(STORY_FILE, "w", encoding="utf-8") as f:
-            f.write("3 min | 3D Pixar Animation | Ek lalachii kauwa aur jadui paani\n")
+            f.write("3 min | Cinematic | Ek lalachii kauwa aur jadui paani\n")
             
 def generate_ai_script(duration_str, style, topic, character_rules):
     try:
@@ -77,8 +48,6 @@ def generate_ai_script(duration_str, style, topic, character_rules):
     🚨 THE CHARACTER BIBLE (CRITICAL RULES):
     Here are the design guidelines for this video: "{character_rules}"
     - The OVERALL ART STYLE must be: "{style}".
-    - Do NOT make all characters look the same (no clones/twins). 
-    - Keep character outfits and features consistent throughout the story. If a King has a golden crown in scene 1, he must have it in scene 20.
     
     🚨 SCRIPT RULES:
     1. HOOK: The first 1-2 lines must be extremely suspenseful or shocking.
@@ -88,62 +57,51 @@ def generate_ai_script(duration_str, style, topic, character_rules):
     [Hindi/Hinglish Voiceover Line] | [Highly Detailed Image Prompt following the Character Bible and Style]
     
     EXAMPLE:
-    Ek samay ki baat hai, ek bhayanak jangal mein ek akela aadmi chal raha tha. | A wide shot of a lone man with a red scarf walking through a dark, foggy, terrifying forest. {style}.
+    Ek samay ki baat hai, ek bhayanak jangal mein ek akela aadmi chal raha tha. | A {style} shot of a lone man resembling a young Dev Patel with a red scarf walking through a dark, foggy forest.
     
     START DIRECTLY WITH LINE 1. NO INTRO. NO OUTRO. EXACTLY {target_scenes} LINES."""
     
-    models = get_live_free_models()
-    max_attempts = 15 # Will try up to 15 different models/attempts
-    attempt = 1
+    max_attempts = 3 # Astra bahut smart hai, 3 try kaafi hain
     
-    for model_name in models:
-        for _ in range(2): # Try each model 2 times
-            if attempt > max_attempts:
-                print("❌ ERROR: Tried too many times. All AI models failed.")
-                sys.exit(1)
-                
-            try:
-                print(f"🔄 Attempt {attempt}: Generating Story with {model_name}...")
-                response = client.chat.completions.create(
-                    model=model_name,
-                    messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
-                    temperature=0.8
-                )
-                text = response.choices[0].message.content
-                
-                valid_lines = [line.strip() for line in text.split('\n') if '|' in line and not line.startswith('|')]
-                if len(valid_lines) >= 5:
-                    print(f"✅ Success! Generated {len(valid_lines)} micro-scenes/prompts from {model_name}.")
-                    return "\n".join(valid_lines)
-                else:
-                    print(f"⚠️ Model {model_name} gave bad format. Retrying...")
-            except Exception as e:
-                error_msg = str(e)
-                print(f"⚠️ {model_name} failed: {error_msg[:100]}...")
-                time.sleep(2)
-                
-            attempt += 1
+    for attempt in range(1, max_attempts + 1):
+        try:
+            print(f"🔄 Attempt {attempt}: Generating Story with KIE API ({MODEL_NAME})...")
+            response = client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
+                temperature=0.7
+            )
+            text = response.choices[0].message.content
             
-    print("❌ Failed to generate script after all attempts.")
+            valid_lines = [line.strip() for line in text.split('\n') if '|' in line and not line.startswith('|')]
+            if len(valid_lines) >= 5:
+                print(f"✅ Success! Generated {len(valid_lines)} micro-scenes/prompts from gpt-6-astra.")
+                return "\n".join(valid_lines)
+            else:
+                print(f"⚠️ Formatting error. Retrying...")
+        except Exception as e:
+            print(f"⚠️ API Error: {str(e)[:100]}...")
+            time.sleep(2)
+            
+    print("❌ Failed to generate script after 3 attempts.")
     sys.exit(1)
 
 def generate_ai_metadata(topic):
     prompt = f"""Topic: '{topic}'.
-    Create highly VIRAL, HIGH-SEARCH-VOLUME YouTube Long-form Video metadata.
+    Create highly VIRAL YouTube Long-form Video metadata.
     Format EXACTLY:
-    TITLE: [Clickbaity Viral Title in English/Hindi (Max 70 chars)]
-    DESC: [A highly engaging description. Tease the story but don't reveal the ending.]
+    TITLE: [Clickbaity Viral Title in Hindi/English (Max 70 chars)]
+    DESC: [Engaging description. Tease the story.]
     TAGS: [comma separated top 10 SEO tags]
     MUSIC: [10-word prompt for AI background music, e.g., 'epic sad cinematic emotional']"""
     
-    models = get_live_free_models()
-    for model_name in models[:5]: # Try first 5 models for metadata
+    for _ in range(3):
         try:
-            print(f"🎵 Generating Metadata using {model_name}...")
+            print(f"🎵 Generating Metadata using {MODEL_NAME}...")
             response = client.chat.completions.create(
-                model=model_name,
+                model=MODEL_NAME,
                 messages=[{"role": "system", "content": "You are a YouTube SEO Expert."}, {"role": "user", "content": prompt}],
-                temperature=0.8
+                temperature=0.7
             )
             text = response.choices[0].message.content
             
@@ -177,7 +135,7 @@ def main():
     if len(parts) >= 3:
         duration_str, style, topic = parts[0], parts[1], parts[2]
     else:
-        duration_str, style, topic = "3 min", "Cinematic Realistic", stories[0]
+        duration_str, style, topic = "2 min", "Cinematic Realistic", stories[0]
         
     print(f"🎬 Planning: {topic} | Length: {duration_str} | Style: {style}")
     
