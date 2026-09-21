@@ -3,12 +3,13 @@ import json
 import subprocess
 import urllib.request
 import random
+from PIL import Image
 
 try:
     from rembg import remove
 except ImportError:
     print("⏳ Installing rembg AI dynamically...")
-    subprocess.run(["pip", "install", "rembg", "onnxruntime"])
+    subprocess.run(["pip", "install", "rembg", "onnxruntime", "pillow"])
     from rembg import remove
 
 IMAGE_DIR = "scene_images"
@@ -19,24 +20,47 @@ SCRIPT_FILE = "script_data.json"
 TIMESTAMPS_FILE = "audio_timestamps.json"
 CONFIG_FILE = "client_setup.json"
 FONT_FILE = "Anton-Regular.ttf"
+BGM_FILE = os.path.join(SFX_DIR, "auto_bgm.mp3")
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 def download_viral_font():
     if not os.path.exists(FONT_FILE):
+        print("📥 Downloading Viral 'Anton' Font...")
         urllib.request.urlretrieve("https://raw.githubusercontent.com/google/fonts/main/ofl/anton/Anton-Regular.ttf", FONT_FILE)
 
 def create_parallax_layers(img_path, scene_id):
     fg_path = os.path.join(IMAGE_DIR, f"scene_{scene_id}_fg.png")
     if not os.path.exists(fg_path):
         try:
+            print(f"✂️ AI Cutting foreground for Scene {scene_id}...")
             with open(img_path, 'rb') as i:
                 with open(fg_path, 'wb') as o:
                     o.write(remove(i.read()))
         except Exception as e:
-            print(f"⚠️ Rembg failed for scene {scene_id}, falling back to original image.")
-            return img_path, img_path # Fallback if AI fails
+            print(f"⚠️ Rembg failed for scene {scene_id}.")
+            return img_path, None
     return img_path, fg_path
+
+# 🔥 THE MAGIC: Check karta hai ki cutout mein character hai ya khali hai!
+def has_valid_character(fg_path):
+    if not fg_path or not os.path.exists(fg_path):
+        return False
+    try:
+        with Image.open(fg_path) as img:
+            bbox = img.getbbox() # Check bounding box of non-transparent pixels
+            if not bbox:
+                return False
+            # Check if the cutout is reasonably large (at least 5% of screen)
+            width = bbox[2] - bbox[0]
+            height = bbox[3] - bbox[1]
+            area = width * height
+            total_area = img.width * img.height
+            if area < (total_area * 0.05): 
+                return False
+            return True
+    except:
+        return False
 
 def get_video_dimensions():
     with open(CONFIG_FILE, "r") as f:
@@ -50,57 +74,71 @@ def create_scene_clip(scene_id, text, duration, width, height):
     out_path = os.path.join(OUTPUT_DIR, f"clip_{scene_id}.mp4")
     
     frames = int(duration * 25)
+    moves = ['zoom_in', 'pan_left', 'pan_right']
+    move = random.choice(moves)
     
-    # ==========================================
-    # 🔥 1. RANDOM SMOOTH CAMERA MOVEMENTS
-    # ==========================================
-    camera_moves = ['zoom_in', 'pan_left', 'pan_right']
-    move = random.choice(camera_moves)
+    has_char = has_valid_character(fg_path)
     
-    if move == 'zoom_in':
-        # Dheere se aage aana (Smooth Zoom)
-        bg_filter = f"[0:v]scale={width}:{height},gblur=sigma=5,zoompan=z='min(zoom+0.0004,1.1)':d={frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}[bg];"
-    elif move == 'pan_left':
-        # Dheere se Left dekhna
-        bg_filter = f"[0:v]scale={width}:{height},gblur=sigma=5,zoompan=z=1.1:d={frames}:x='max(0, (iw/2-(iw/zoom/2)) - 0.5*t*25)':y='ih/2-(ih/zoom/2)':s={width}x{height}[bg];"
-    else: # pan_right
-        # Dheere se Right dekhna
-        bg_filter = f"[0:v]scale={width}:{height},gblur=sigma=5,zoompan=z=1.1:d={frames}:x='min(iw-(iw/zoom), (iw/2-(iw/zoom/2)) + 0.5*t*25)':y='ih/2-(ih/zoom/2)':s={width}x{height}[bg];"
+    if has_char:
+        # ==========================================
+        # 🔥 3D PARALLAX MODE (Smooth)
+        # ==========================================
+        print(f"🦸‍♂️ Character Detected in Scene {scene_id} -> Applying 3D Parallax!")
+        if move == 'zoom_in':
+            bg_filter = f"[0:v]scale={width}:{height},gblur=sigma=5,zoompan=z='min(zoom+0.0005,1.15)':d={frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}[bg];"
+        elif move == 'pan_left':
+            bg_filter = f"[0:v]scale={width}:{height},gblur=sigma=5,zoompan=z=1.15:d={frames}:x='max(0, iw/2-(iw/zoom/2)-on)':y='ih/2-(ih/zoom/2)':s={width}x{height}[bg];"
+        else:
+            bg_filter = f"[0:v]scale={width}:{height},gblur=sigma=5,zoompan=z=1.15:d={frames}:x='min(iw-(iw/zoom), iw/2-(iw/zoom/2)+on)':y='ih/2-(ih/zoom/2)':s={width}x{height}[bg];"
 
-    # ==========================================
-    # 🔥 2. SMOOTH FADE-IN FOREGROUND (No Drop)
-    # ==========================================
-    # Character halke se transparency (opacity 0 se 1) ke sath 1 second me samne aayega
-    fg_filter = f"[1:v]scale={width}:{height},format=rgba,colorchannelmixer=aa='min(t/1,1)'[fg];[bg][fg]overlay=0:0[comp];"
+        # Character super smoothly fade-in hoga bina hile (True depth illusion)
+        fg_filter = f"[1:v]scale={width}:{height},format=rgba,fade=t=in:st=0:d=1:alpha=1[fg];[bg][fg]overlay=0:0[comp];"
+        base_video_filter = bg_filter + fg_filter
+        
+        cmd = ["ffmpeg", "-y", "-loop", "1", "-i", img_path, "-loop", "1", "-i", fg_path]
+        audio_idx = 2
+        sfx_idx = 3
+    else:
+        # ==========================================
+        # 🌄 NORMAL CINEMATIC MODE (Scenery/No Character)
+        # ==========================================
+        print(f"🌄 No Character in Scene {scene_id} -> Applying Cinematic Pan/Zoom.")
+        if move == 'zoom_in':
+            base_video_filter = f"[0:v]scale={width}:{height},zoompan=z='min(zoom+0.0005,1.15)':d={frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}[comp];"
+        elif move == 'pan_left':
+            base_video_filter = f"[0:v]scale={width}:{height},zoompan=z=1.15:d={frames}:x='max(0, iw/2-(iw/zoom/2)-on)':y='ih/2-(ih/zoom/2)':s={width}x{height}[comp];"
+        else:
+            base_video_filter = f"[0:v]scale={width}:{height},zoompan=z=1.15:d={frames}:x='min(iw-(iw/zoom), iw/2-(iw/zoom/2)+on)':y='ih/2-(ih/zoom/2)':s={width}x{height}[comp];"
+            
+        cmd = ["ffmpeg", "-y", "-loop", "1", "-i", img_path]
+        audio_idx = 1
+        sfx_idx = 2
+
+    cmd.extend(["-i", audio_path])
     
     # ==========================================
-    # 🔥 3. PREMIUM SLIDING TEXT WITH SHADOW BOX
+    # 🔥 VIRAL TEXT ENGINE
     # ==========================================
     clean_text = text.replace("'", "").replace(":", r"\:")
     fontsize = 80 if width == 1080 else 90
-    text_y_target = "(h-text_h)/2+400" if width == 1080 else "(h-text_h)/2+300"
+    text_y = "(h-text_h)/2+400" if width == 1080 else "(h-text_h)/2+300"
     
-    # Text niche se halka sa upar slide karke set hoga
-    text_filter = f"[comp]drawtext=fontfile={FONT_FILE}:text='{clean_text}':fontcolor=#FFE800:fontsize={fontsize}:borderw=4:bordercolor=black:shadowcolor=black@0.8:shadowx=6:shadowy=6:box=1:boxcolor=black@0.4:boxborderw=10:x=(w-text_w)/2:y='max({text_y_target}, {text_y_target}+50-(t*100))'[v_out]"
+    text_filter = f"[comp]drawtext=fontfile={FONT_FILE}:text='{clean_text}':fontcolor=#FFE800:fontsize={fontsize}:borderw=4:bordercolor=black:shadowcolor=black@0.8:shadowx=6:shadowy=6:box=1:boxcolor=black@0.4:boxborderw=10:x=(w-text_w)/2:y='max({text_y}, {text_y}+50-(t*100))'[v_out]"
     
-    # Combine Filters
-    v_filter = bg_filter + fg_filter + text_filter
-    
-    # FFmpeg commands compilation
-    cmd = ["ffmpeg", "-y", "-loop", "1", "-i", img_path, "-loop", "1", "-i", fg_path, "-i", audio_path]
-    
+    v_filter = base_video_filter + text_filter
+
+    # ==========================================
+    # 🎵 AUDIO MIXING
+    # ==========================================
     if os.path.exists(sfx_path):
         cmd.extend(["-i", sfx_path])
-        # Sound ab bina delay ke smoothly fade-in ke sath bajega
-        a_filter = "[2:a]volume=1.2[voice];[3:a]volume=0.4[sfx];[voice][sfx]amix=inputs=2:duration=first[a_out]"
-        full_filter = f"{v_filter};{a_filter}"
-        cmd.extend(["-filter_complex", full_filter, "-map", "[v_out]", "-map", "[a_out]"])
+        a_filter = f"[{audio_idx}:a]volume=1.2[voice];[{sfx_idx}:a]volume=0.4[sfx];[voice][sfx]amix=inputs=2:duration=first[a_out]"
+        cmd.extend(["-filter_complex", f"{v_filter};{a_filter}", "-map", "[v_out]", "-map", "[a_out]"])
     else:
-        cmd.extend(["-filter_complex", v_filter, "-map", "[v_out]", "-map", "2:a"])
+        cmd.extend(["-filter_complex", v_filter, "-map", "[v_out]", "-map", f"{audio_idx}:a"])
         
     cmd.extend(["-c:v", "libx264", "-c:a", "aac", "-b:a", "192k", "-t", str(duration), "-pix_fmt", "yuv420p", "-preset", "fast", out_path])
     
-    print(f"🎬 Rendering Scene {scene_id} [Movement: {move.upper()} | Soft Fade-In]...")
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return out_path
 
@@ -124,21 +162,19 @@ def main():
     temp_video = os.path.join(OUTPUT_DIR, "TEMP_MASTERPIECE.mp4")
     subprocess.run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_txt, "-c", "copy", temp_video], check=True)
 
-    # 4. Auto BGM Mixing
     final_output = os.path.join(OUTPUT_DIR, "FINAL_AGENCY_MASTERPIECE.mp4")
-    bgm_path = os.path.join(SFX_DIR, "auto_bgm.mp3")
     
-    if os.path.exists(bgm_path):
+    if os.path.exists(BGM_FILE):
         print("🎵 Adding Cinematic Background Music...")
         subprocess.run([
-            "ffmpeg", "-y", "-i", temp_video, "-stream_loop", "-1", "-i", bgm_path, 
+            "ffmpeg", "-y", "-i", temp_video, "-stream_loop", "-1", "-i", BGM_FILE, 
             "-filter_complex", "[1:a]volume=0.08[bgm];[0:a][bgm]amix=inputs=2:duration=first[aout]", 
             "-map", "0:v", "-map", "[aout]", "-c:v", "copy", "-c:a", "aac", "-shortest", final_output
         ], check=True)
     else:
         os.rename(temp_video, final_output)
         
-    print(f"🎉 BOOM! Ultra-Smooth Cinematic Video Ready: {final_output}")
+    print(f"🎉 BOOM! Ultra-Smooth Smart Parallax Video Ready: {final_output}")
 
 if __name__ == "__main__":
     main()
