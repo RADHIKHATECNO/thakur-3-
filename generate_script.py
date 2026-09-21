@@ -9,77 +9,59 @@ if not XKIRO_API_KEY: exit(1)
 client = OpenAI(api_key=XKIRO_API_KEY, base_url="https://api.xkiro.com/v1")
 
 def load_client_config():
-    with open("client_setup.json", "r", encoding="utf-8") as f: 
-        return json.load(f)
+    with open("client_setup.json", "r", encoding="utf-8") as f: return json.load(f)
 
 def get_dynamic_models():
-    try:
-        all_models = [m.id for m in client.models.list().data]
-        best_keywords = ["qwen", "deepseek", "flash", "gpt", "llama"]
-        prioritized = [m for k in best_keywords for m in all_models if k in m.lower()]
-        return list(dict.fromkeys(prioritized))[:15]
-    except:
-        return ["qwen-2.5-72b", "deepseek-chat", "gpt-4o-mini"]
+    return ["qwen-2.5-72b", "deepseek-chat", "gpt-4o-mini"] # Failsafe fast models
 
 def generate_cinematic_json(config):
-    # Calculate exact scenes based on duration (approx 4 seconds per scene)
     total_scenes = max(4, int(config["duration_seconds"] / 4))
     
-    system_prompt = f"""You are a Master Hollywood Director and Story Writer.
-Your job is to write a COMPLETE, logically paced story within EXACTLY {total_scenes} scenes.
-Pacing Rules:
-- Scene 1-2: Strong Hook / Beginning
-- Middle Scenes: Build up the plot based on the topic
-- Last 2 Scenes: Proper Climax and Conclusion.
-
-Return ONLY a strict JSON array in this format:
+    # 🔥 AI DIRECTS THE CAMERA NOW!
+    system_prompt = f"""You are a Hollywood YouTube Director.
+Write a {total_scenes}-scene story. Return a strict JSON array.
+Format required:
 [
   {{
     "scene": 1,
     "narration": "Hindi/Hinglish dialogue (max 10 words)",
-    "image_prompt": "Highly detailed DALL-E prompt (MAX 350 CHARACTERS)",
+    "image_prompt": "Highly detailed prompt (MAX 350 CHARACTERS)",
     "sfx": "thunder",
-    "animation": "Choose ONE: [fly_up, drive_forward, slide_left, slide_right, float_clouds, zoom_in]"
+    "camera": "Choose ONE: [fast_zoom, zoom_out, shake, smooth_pan]"
   }}
 ]
+CAMERA RULES:
+- If action is shocking/revealing: use 'fast_zoom'
+- If showing a large landscape/spaceship: use 'zoom_out'
+- If impact, fear, or explosion: use 'shake'
+- Default calm scene: 'smooth_pan'
 
-CRITICAL PROMPT RULES FOR CONSISTENCY (DO NOT IGNORE):
-1. Keep the "image_prompt" UNDER 350 CHARACTERS to avoid crashing the image generator.
-2. Every scene MUST include the exact art style: '{config['art_style']}'.
-3. Every scene MUST include a short version of this character: '{config['character_anchor']}'.
-4. If a specific object (like a spaceship, a magical pot, etc.) appears, describe it the exact same way in every scene it appears so it doesn't change shape.
-5. Combine all these details concisely to stay under the character limit.
+Keep image_prompts consistent with the anchor: '{config['character_anchor']}' and style: '{config['art_style']}'.
 """
 
-    user_prompt = f"Topic to turn into a full story: {config['topic']}"
+    user_prompt = f"Topic: {config['topic']}"
 
-    print(f"🎬 Directing {total_scenes} well-paced scenes (Start to Finish)...")
+    print(f"🎬 Directing {total_scenes} scenes with AI Camera Moves...")
     
-    for model in get_dynamic_models():
-        print(f"🔄 Trying model: {model}...")
+    for attempt in range(3):
         try:
             response = client.chat.completions.create(
-                model=model, 
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ], 
+                model="qwen-2.5-72b", 
+                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], 
                 temperature=0.7
             )
-            
             output = response.choices[0].message.content.strip()
             if output.startswith("```json"): output = output[7:]
             if output.startswith("```"): output = output[3:]
             if output.endswith("```"): output = output[:-3]
                 
             script_data = json.loads(output.strip())
-            if isinstance(script_data, dict) and "scenes" in script_data: 
-                script_data = script_data["scenes"]
+            if isinstance(script_data, dict) and "scenes" in script_data: script_data = script_data["scenes"]
                 
             if isinstance(script_data, list):
                 with open("script_data.json", "w", encoding="utf-8") as f:
                     json.dump(script_data, f, indent=4, ensure_ascii=False)
-                print(f"✅ Success! AI Animator created a complete story in {len(script_data)} scenes.")
+                print("✅ Success! AI Camera Script generated.")
                 return True
         except Exception as e:
             print(f"⚠️ Failed: {str(e)[:50]}")
@@ -88,7 +70,4 @@ CRITICAL PROMPT RULES FOR CONSISTENCY (DO NOT IGNORE):
     return False
 
 if __name__ == "__main__":
-    if generate_cinematic_json(load_client_config()):
-        print("🚀 Smart JSON Script Saved!")
-    else: 
-        exit(1)
+    if generate_cinematic_json(load_client_config()): print("🚀 Script Saved!")
