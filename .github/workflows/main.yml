@@ -112,7 +112,10 @@ jobs:
       - name: Install System Dependencies (FFmpeg)
         run: |
           sudo apt-get update && sudo apt-get install -y ffmpeg fonts-liberation
-          pip install requests
+          
+      - name: Install Python Dependencies (Rembg & Assets)
+        # 🔥 YAHAN REMBG ADD KIYA HAI AI CUTOUT KE LIYE
+        run: pip install requests rembg onnxruntime pillow 
           
       - name: Download Core Assets
         uses: actions/download-artifact@v4
@@ -131,11 +134,11 @@ jobs:
           FREESOUND_API_KEY: ${{ secrets.FREESOUND_API_KEY }}
         run: python -u fetch_assets.py
         
-      - name: 🎬 Render Final Masterpiece (FFmpeg)
+      - name: 🎬 Render Final Masterpiece (Parallax + VFX)
         run: python -u master_assembly.py
         
       - name: 📤 Upload Final Video Artifact
         uses: actions/upload-artifact@v4
         with:
           name: FINAL_AGENCY_VIDEO
-          path: final_output/FINAL_MASTERPIECE.mp4
+          path: final_output/FINAL_AGENCY_MASTERPIECE.mp4
