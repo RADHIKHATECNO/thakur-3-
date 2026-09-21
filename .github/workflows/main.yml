@@ -6,7 +6,7 @@ on:
     - cron: '30 12 * * *' # Shaam 8:00 Baje (IST)
   workflow_dispatch:      # Manual Run Button
 
-# 🔥 YAHAN PERMISSIONS FIX KI GAYI HAIN (403 Error Solution) 🔥
+# 🔥 YAHAN PERMISSIONS FIX KI GAYI HAIN (403 Error Solution & Auto-Commit) 🔥
 permissions:
   contents: write       
   actions: read         
@@ -33,8 +33,6 @@ jobs:
         run: python -u generate_script.py
         
       - name: Generate Voiceover & Timestamps
-        env:
-          XKIRO_API_KEY: ${{ secrets.XKIRO_API_KEY }}
         run: python -u generate_audio.py
         
       - name: Calculate Dynamic Matrix for Images
@@ -116,8 +114,9 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y ffmpeg fonts-liberation
           
-      - name: Install Python Dependencies
-        run: pip install requests rembg onnxruntime pillow openai
+      - name: Install Python Dependencies (OpenCV, Rembg, etc.)
+        # 🔥 YAHAN opencv-python-headless ADD KIYA HAI 8D AUDIO & FACE TRACKING KE LIYE
+        run: pip install requests rembg onnxruntime pillow openai opencv-python-headless
           
       - name: Download Core Assets
         uses: actions/download-artifact@v4
@@ -136,7 +135,7 @@ jobs:
           FREESOUND_API_KEY: ${{ secrets.FREESOUND_API_KEY }}
         run: python -u fetch_assets.py
         
-      - name: 🎬 Render Final Masterpiece (Smart Parallax + VFX)
+      - name: 🎬 Render Final Masterpiece (Face Track + 8D Audio)
         run: python -u master_assembly.py
         
       - name: 📤 Upload Final Video Artifact
