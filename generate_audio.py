@@ -8,7 +8,6 @@ AUDIO_DIR = "audio_clips"
 SCRIPT_FILE = "script_data.json"
 TIMESTAMPS_FILE = "audio_timestamps.json"
 
-# Wahi same API Key jo humne Script banate time use ki thi
 XKIRO_API_KEY = os.getenv("XKIRO_API_KEY")
 
 if not XKIRO_API_KEY:
@@ -17,13 +16,11 @@ if not XKIRO_API_KEY:
 
 os.makedirs(AUDIO_DIR, exist_ok=True)
 
-# 🔥 THE MAGIC: Auto-Fallback TTS Models & Voices
-# Agar pehla fail hoga toh dusra, phir teesra apne aap try karega!
+# 🔥 FIX: xKiro ne model ka naam badal kar "xkiro-voice" kar diya hai!
 TTS_COMBINATIONS = [
-    {"model": "tts-1", "voice": "onyx"},       # 1st Priority: Deep cinematic male (Fast)
-    {"model": "tts-1-hd", "voice": "onyx"},    # 2nd Priority: High-definition deep male
-    {"model": "tts-1", "voice": "echo"},       # 3rd Priority: Alternative male voice
-    {"model": "tts-1", "voice": "alloy"}       # 4th Priority: Neutral universal voice
+    {"model": "xkiro-voice", "voice": "onyx"},       # 1st: Deep cinematic male
+    {"model": "xkiro-voice", "voice": "echo"},       # 2nd: Alternative male
+    {"model": "xkiro-voice", "voice": "alloy"}       # 3rd: Neutral voice
 ]
 
 def generate_line_audio(text, filename):
@@ -33,7 +30,6 @@ def generate_line_audio(text, filename):
         "Content-Type": "application/json"
     }
     
-    # Ek-ek karke combination try karega jab tak success na mile
     for combo in TTS_COMBINATIONS:
         model = combo["model"]
         voice = combo["voice"]
@@ -56,7 +52,7 @@ def generate_line_audio(text, filename):
         except Exception as e:
             print(f"⚠️ Network Failed ({model}/{voice}): {e}")
             
-        time.sleep(2) # Retry se pehle 2 second ka aaram
+        time.sleep(2)
         
     return False
 
@@ -75,21 +71,18 @@ def main():
         scene_id = scene.get("scene")
         text = scene.get("narration")
         
-        # Text clean karna zaroori hai taaki AI ajeeb aawaz na nikale
         clean_text = text.replace("*", "").replace("#", "").strip()
         audio_path = os.path.join(AUDIO_DIR, f"scene_{scene_id}.mp3")
 
         success = generate_line_audio(clean_text, audio_path)
         
         if success and os.path.exists(audio_path):
-            # Audio ki timing nikal kar FFmpeg ke liye save karna (0.3s pause ke sath)
             audio = MP3(audio_path)
             duration = round(audio.info.length + 0.3, 2)
             timestamps[str(scene_id)] = duration
             print(f"✅ Scene {scene_id} Audio Ready: {duration}s -> {clean_text[:30]}...")
         else:
             print(f"❌ Failed to generate audio for scene {scene_id}")
-            # Fail hone par dummy timing daal denge taaki video render na ruke
             timestamps[str(scene_id)] = 4.0
 
     with open(TIMESTAMPS_FILE, "w", encoding="utf-8") as f:
