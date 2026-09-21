@@ -16,8 +16,8 @@ if not XKIRO_API_KEY:
 
 os.makedirs(AUDIO_DIR, exist_ok=True)
 
-# 🔥 THE MAGIC: Auto-Fetch Live Voices from xKiro!
-def get_live_voice():
+# 🔥 THE MAGIC: Smart Voice Filter for Hindi/Male
+def get_best_voice():
     print("🔍 Fetching live available voices from xKiro...")
     url = "https://api.xkiro.com/v1/audio/voices"
     headers = {"Authorization": f"Bearer {XKIRO_API_KEY}"}
@@ -28,31 +28,52 @@ def get_live_voice():
             data = response.json()
             voices = []
             
-            # API JSON ka format kuch bhi ho, hum usme se voices nikal lenge
             if "voices" in data:
                 voices = data["voices"]
             elif "data" in data:
                 voices = [v["id"] for v in data["data"]]
             elif isinstance(data, list):
-                voices = [v.get("id", v) if isinstance(v, dict) else v for v in data]
+                voices = data
                 
-            if voices:
-                print(f"✅ Found {len(voices)} live voices! (Using the first one: '{voices[0]}')")
-                # Pehli available voice ko return kar raha hai
-                valid_voice = voices[0] 
-                if isinstance(valid_voice, dict) and "id" in valid_voice:
-                    return valid_voice["id"]
-                return valid_voice
+            # Sab voices ke ID extract kar lo
+            v_ids = [v.get("id", v) if isinstance(v, dict) else v for v in voices]
+            
+            if v_ids:
+                print(f"✅ Found {len(v_ids)} live voices. Finding the best Hindi/Male voice...")
+                
+                # PRIORITY 1: Indian/Hindi Male
+                for v in v_ids:
+                    v_lower = v.lower()
+                    if ("ind" in v_lower or "hin" in v_lower) and "male" in v_lower:
+                        return v
+                        
+                # PRIORITY 2: Any Indian/Hindi Voice
+                for v in v_ids:
+                    v_lower = v.lower()
+                    if "ind" in v_lower or "hin" in v_lower:
+                        return v
+                        
+                # PRIORITY 3: Any Male Voice (Mexican/Female avoid karne ke liye)
+                for v in v_ids:
+                    v_lower = v.lower()
+                    if "male" in v_lower and "female" not in v_lower:
+                        return v
+                        
+                # PRIORITY 4: Standard AI Voices (Onyx, Echo etc.)
+                for v in v_ids:
+                    if v.lower() in ["onyx", "echo", "alloy", "fable"]:
+                        return v
+                        
+                return v_ids[0] # Last fallback
         else:
             print(f"⚠️ Failed to fetch voice list: {response.text}")
     except Exception as e:
         print(f"⚠️ Network error fetching voices: {e}")
         
-    print("⚠️ Fallback to 'default' voice.")
-    return "default"
+    return "alloy" # Default fallback
 
-# Get the voice once before looping
-LIVE_VOICE = get_live_voice()
+# Script chalne se pehle ek baar best voice dhoondh lega
+LIVE_VOICE = get_best_voice()
 
 def generate_line_audio(text, filename):
     url = "https://api.xkiro.com/v1/audio/speech"
@@ -61,7 +82,6 @@ def generate_line_audio(text, filename):
         "Content-Type": "application/json"
     }
     
-    # Ab fail hone ka chance nahi kyunki hum wo voice de rahe hain jo server ne khud di hai
     model = "xkiro-voice"
     print(f"🔄 Generating TTS... Model: '{model}' | Voice: '{LIVE_VOICE}'")
     
@@ -100,6 +120,7 @@ def main():
         scene_id = scene.get("scene")
         text = scene.get("narration")
         
+        # Symbols remove karna zaroori hai
         clean_text = text.replace("*", "").replace("#", "").strip()
         audio_path = os.path.join(AUDIO_DIR, f"scene_{scene_id}.mp3")
 
@@ -117,7 +138,7 @@ def main():
     with open(TIMESTAMPS_FILE, "w", encoding="utf-8") as f:
         json.dump(timestamps, f, indent=4)
         
-    print("🚀 All Premium Audio Clips Generated Successfully!")
+    print(f"🚀 All Premium Audio Clips Generated Successfully using '{LIVE_VOICE}' voice!")
 
 if __name__ == "__main__":
     main()
