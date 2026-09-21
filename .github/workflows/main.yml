@@ -23,7 +23,7 @@ jobs:
           python-version: '3.10'
           
       - name: Install Dependencies (Script & Audio)
-        run: pip install requests mutagen edge-tts
+        run: pip install requests mutagen edge-tts pillow
         
       - name: Generate AI Prompts (BazaarLink Auto)
         env:
@@ -55,11 +55,23 @@ jobs:
       - name: Set Matrix for Image Generation
         id: set-matrix
         run: |
-          # Count lines containing '|' to get exact number of scenes
-          count=$(grep -c '|' prompts.txt || echo 0)
-          if [ "$count" -eq 0 ]; then exit 1; fi
-          matrix_json=\$(python3 -c "import json; print(json.dumps(list(range(1, \$count + 1))))")
-          echo "matrix=\$matrix_json" >> \$GITHUB_OUTPUT
+          # Safely count lines and pass to Python
+          if [ -f prompts.txt ]; then
+            SCENE_COUNT=$(grep -c '|' prompts.txt || echo "0")
+          else
+            SCENE_COUNT=0
+          fi
+          
+          if [ "$SCENE_COUNT" -eq "0" ]; then 
+            echo "❌ No valid scenes found in prompts.txt. Exiting."
+            exit 1
+          fi
+          
+          echo "✅ Found $SCENE_COUNT scenes."
+          export SCENE_COUNT
+          
+          MATRIX_JSON=$(python3 -c "import os, json; print(json.dumps(list(range(1, int(os.environ['SCENE_COUNT']) + 1))))")
+          echo "matrix=$MATRIX_JSON" >> $GITHUB_OUTPUT
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
 
@@ -107,4 +119,47 @@ jobs:
 
   # ==========================================
   # STAGE 3: EDITING & UPLOAD (LONG FORMAT)
-  # =====================
+  # ==========================================
+  stage3-edit-upload:
+    needs: stage2-images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          
+      - name: Install System Dependencies (FFmpeg & AI)
+        run: |
+          sudo apt-get update && sudo apt-get install -y ffmpeg zip
+          pip install google-api-python-client google-auth-httplib2 google-auth-oauthlib requests transformers torch scipy pillow
+          
+      - name: Download Script & Audio Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: script-audio-data
+          
+      - name: Download All Image Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: scene_images/
+          pattern: image_machine_*
+          merge-multiple: true
+          
+      - name: Generate Local AI BGM Loop
+        run: python -u generate_music.py
+        
+      - name: Master Assembly (Sync Audio, Images & Ken Burns)
+        run: python -u process_videos.py
+        
+      - name: Upload Final Video Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Final_Long_Video
+          path: final_output/Final_Masterpiece.mp4
+          
+      - name: Auto Upload to YouTube
+        env:
+          YOUTUBE_TOKEN_BASE64: ${{ secrets.YOUTUBE_TOKEN_BASE64 }}
+        run: python -u upload_youtube.py
