@@ -13,8 +13,6 @@ except ImportError:
 IMAGE_DIR, AUDIO_DIR, SFX_DIR, OUTPUT_DIR = "scene_images", "audio_clips", "sfx_clips", "final_output"
 SCRIPT_FILE, TIMESTAMPS_FILE, CONFIG_FILE = "script_data.json", "audio_timestamps.json", "client_setup.json"
 BGM_FILE = os.path.join(SFX_DIR, "auto_bgm.mp3")
-
-# 🔥 FIX: More reliable font for Linux/FFmpeg
 FONT_FILE = "Roboto-Black.ttf"
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -28,7 +26,6 @@ def create_parallax_layers(img_path, scene_id):
     fg_path = os.path.join(IMAGE_DIR, f"scene_{scene_id}_fg.png")
     if not os.path.exists(fg_path):
         try:
-            print(f"✂️ Cutting Character for Scene {scene_id}...")
             with open(img_path, 'rb') as i:
                 with open(fg_path, 'wb') as o: o.write(remove(i.read()))
         except: return img_path, None
@@ -44,11 +41,15 @@ def has_valid_character(fg_path):
             return area > (img.width * img.height * 0.05)
     except: return False
 
-def get_video_dimensions():
+def get_video_config():
     with open(CONFIG_FILE, "r") as f:
-        return (1080, 1920) if json.load(f).get("video_format", "long").lower() == "short" else (1920, 1080)
+        data = json.load(f)
+        fmt = data.get("video_format", "long").lower()
+        width, height = (1080, 1920) if fmt == "short" else (1920, 1080)
+        client_name = data.get("client_name", "@AgencyVideo")
+        return width, height, client_name
 
-def generate_karaoke_text_filters(text, duration, width, height):
+def generate_karaoke_text_filters(text, duration, width, height, client_name):
     words = text.replace("'", "").replace(":", r"\:").split()
     filters = []
     chunk_size = max(1, len(words) // 3)
@@ -62,15 +63,18 @@ def generate_karaoke_text_filters(text, duration, width, height):
     for i, chunk in enumerate(chunks):
         start_time = i * time_per_chunk
         color = colors[i % len(colors)]
-        # 🔥 FIX: Removed box, added strong border and shadow for clean look
         f = f"drawtext=fontfile={FONT_FILE}:text='{chunk}':fontcolor={color}:fontsize={fontsize}:borderw=6:bordercolor=black:shadowcolor=black@0.9:shadowx=6:shadowy=6:x=(w-text_w)/2:y={y_pos}:enable='between(t,{start_time},100)'"
         filters.append(f)
+        
+    # 🔥 THE WATERMARK ENGINE (Transparent Client Name on Top Right)
+    wm_size = 45 if width == 1080 else 60
+    watermark = f"drawtext=fontfile={FONT_FILE}:text='{client_name}':fontcolor=white@0.4:fontsize={wm_size}:x=w-text_w-30:y=30"
+    filters.append(watermark)
+    
     return ",".join(filters)
 
-def create_scene_clip(scene_id, scene_data, duration, width, height):
+def create_scene_clip(scene_id, scene_data, duration, width, height, client_name):
     text = scene_data.get("narration", "")
-    
-    # 🔥 FAST PACING: Force duration max 3 seconds visually (Audio will match)
     visual_duration = min(duration, 3.5) 
     frames = int(visual_duration * 25)
     
@@ -80,29 +84,23 @@ def create_scene_clip(scene_id, scene_data, duration, width, height):
     out_path = os.path.join(OUTPUT_DIR, f"clip_{scene_id}.mp4")
     
     has_char = has_valid_character(fg_path)
-    
     scale_crop = f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}"
     
     if has_char:
-        # 🔥 THE BREATHING EFFECT: BG slow zoom, Character vibrates smoothly (sin wave)
         bg_filter = f"[0:v]{scale_crop},zoompan=z='min(zoom+0.0003,1.1)':d={frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps=25[bg];"
-        
-        # Smooth Y-axis vibration (5 pixels up/down slowly)
         fg_filter = f"[1:v]{scale_crop},format=rgba[fg];[bg][fg]overlay=0:'5*sin(t*3)'[comp];"
-        
         v_filter_base = bg_filter + fg_filter
         cmd = ["ffmpeg", "-y", "-loop", "1", "-i", img_path, "-loop", "1", "-i", fg_path]
         audio_idx, sfx_idx = 2, 3
     else:
-        # Fallback Scenery
         v_filter_base = f"[0:v]{scale_crop},zoompan=z='min(zoom+0.0006,1.15)':d={frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps=25[comp];"
         cmd = ["ffmpeg", "-y", "-loop", "1", "-i", img_path]
         audio_idx, sfx_idx = 1, 2
 
     cmd.extend(["-i", audio_path])
     
-    # Add Text
-    text_filters = generate_karaoke_text_filters(text, duration, width, height)
+    # Add Text + Watermark
+    text_filters = generate_karaoke_text_filters(text, duration, width, height, client_name)
     v_filter = v_filter_base + f"[comp]{text_filters}[v_out]"
 
     # Audio Mixing
@@ -116,7 +114,7 @@ def create_scene_clip(scene_id, scene_data, duration, width, height):
         
     cmd.extend(["-c:v", "libx264", "-c:a", "aac", "-b:a", "192k", "-ar", "44100", "-ac", "2", "-t", str(visual_duration), "-pix_fmt", "yuv420p", "-preset", "fast", out_path])
     
-    print(f"🎬 Rendering Scene {scene_id} [Breathing Character | 2-3s Fast Pacing]...")
+    print(f"🎬 Rendering Scene {scene_id} [Watermark added: {client_name}]...")
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return out_path
 
@@ -127,14 +125,14 @@ def main():
     with open(TIMESTAMPS_FILE, "r") as f: timestamps = json.load(f)
     with open(SCRIPT_FILE, "r", encoding="utf-8") as f: scenes = json.load(f)
     
-    width, height = get_video_dimensions()
+    width, height, client_name = get_video_config()
     clip_list = []
     
     for scene in scenes:
         scene_id = str(scene["scene"])
         duration = timestamps.get(scene_id)
         if duration and os.path.exists(os.path.join(IMAGE_DIR, f"scene_{scene_id}.jpg")):
-            clip_list.append(create_scene_clip(scene_id, scene, duration, width, height))
+            clip_list.append(create_scene_clip(scene_id, scene, duration, width, height, client_name))
         
     list_txt = os.path.join(OUTPUT_DIR, "concat.txt")
     with open(list_txt, "w") as f:
@@ -154,7 +152,7 @@ def main():
     else:
         os.rename(temp_video, final_output)
         
-    print(f"🎉 BOOM! Fast-Paced Breathing Video Ready: {final_output}")
+    print(f"🎉 BOOM! Video with Watermark & Perfect Audio Ready: {final_output}")
 
 if __name__ == "__main__":
     main()
