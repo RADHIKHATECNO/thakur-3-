@@ -16,7 +16,7 @@ if not XKIRO_API_KEY:
 
 os.makedirs(AUDIO_DIR, exist_ok=True)
 
-# 🔥 THE MAGIC: Smart Voice Filter for Hindi/Male
+# 🔥 THE MAGIC: Strict Voice Filter (Bans Chinese/Mexican etc.)
 def get_best_voice():
     print("🔍 Fetching live available voices from xKiro...")
     url = "https://api.xkiro.com/v1/audio/voices"
@@ -28,51 +28,55 @@ def get_best_voice():
             data = response.json()
             voices = []
             
-            if "voices" in data:
-                voices = data["voices"]
-            elif "data" in data:
-                voices = [v["id"] for v in data["data"]]
-            elif isinstance(data, list):
-                voices = data
+            if "voices" in data: voices = data["voices"]
+            elif "data" in data: voices = [v["id"] for v in data["data"]]
+            elif isinstance(data, list): voices = data
                 
-            # Sab voices ke ID extract kar lo
             v_ids = [v.get("id", v) if isinstance(v, dict) else v for v in voices]
             
             if v_ids:
-                print(f"✅ Found {len(v_ids)} live voices. Finding the best Hindi/Male voice...")
+                # 🚫 BANNED LIST: In deshon ki aawazein Hindi ko barbaad kar deti hain
+                banned = ["chinese", "mexican", "spanish", "french", "german", "korean", "japanese", "arab", "es-", "zh-", "fr-"]
+                
+                # Filter safe voices only
+                safe_voices = [v for v in v_ids if not any(b in v.lower() for b in banned)]
+                if not safe_voices: safe_voices = v_ids # Fallback agar sab ban ho jayein
+                
+                print(f"✅ Found {len(safe_voices)} SAFE live voices. Filtering best Hindi/English Male...")
                 
                 # PRIORITY 1: Indian/Hindi Male
-                for v in v_ids:
-                    v_lower = v.lower()
-                    if ("ind" in v_lower or "hin" in v_lower) and "male" in v_lower:
+                for v in safe_voices:
+                    if ("ind" in v.lower() or "hin" in v.lower() or "hi-" in v.lower()) and "male" in v.lower():
                         return v
                         
                 # PRIORITY 2: Any Indian/Hindi Voice
-                for v in v_ids:
-                    v_lower = v.lower()
-                    if "ind" in v_lower or "hin" in v_lower:
+                for v in safe_voices:
+                    if "ind" in v.lower() or "hin" in v.lower() or "hi-" in v.lower():
                         return v
                         
-                # PRIORITY 3: Any Male Voice (Mexican/Female avoid karne ke liye)
-                for v in v_ids:
-                    v_lower = v.lower()
-                    if "male" in v_lower and "female" not in v_lower:
+                # PRIORITY 3: Multilingual Male (Good for Hinglish)
+                for v in safe_voices:
+                    if "multi" in v.lower() and "male" in v.lower():
                         return v
                         
-                # PRIORITY 4: Standard AI Voices (Onyx, Echo etc.)
-                for v in v_ids:
-                    if v.lower() in ["onyx", "echo", "alloy", "fable"]:
+                # PRIORITY 4: English Male (Better pronunciation for Hindi text than Chinese)
+                for v in safe_voices:
+                    if ("eng" in v.lower() or "en-" in v.lower() or "us-" in v.lower() or "uk-" in v.lower()) and "male" in v.lower():
                         return v
                         
-                return v_ids[0] # Last fallback
+                # PRIORITY 5: Just any safe Male
+                for v in safe_voices:
+                    if "male" in v.lower() and "female" not in v.lower():
+                        return v
+                        
+                return safe_voices[0]
         else:
             print(f"⚠️ Failed to fetch voice list: {response.text}")
     except Exception as e:
         print(f"⚠️ Network error fetching voices: {e}")
         
-    return "alloy" # Default fallback
+    return "alloy" # Default
 
-# Script chalne se pehle ek baar best voice dhoondh lega
 LIVE_VOICE = get_best_voice()
 
 def generate_line_audio(text, filename):
@@ -114,13 +118,10 @@ def main():
         scenes = json.load(f)
 
     timestamps = {}
-    print(f"🎙️ Generating Audio for {len(scenes)} scenes...")
-
     for scene in scenes:
         scene_id = scene.get("scene")
         text = scene.get("narration")
         
-        # Symbols remove karna zaroori hai
         clean_text = text.replace("*", "").replace("#", "").strip()
         audio_path = os.path.join(AUDIO_DIR, f"scene_{scene_id}.mp3")
 
@@ -130,15 +131,14 @@ def main():
             audio = MP3(audio_path)
             duration = round(audio.info.length + 0.3, 2)
             timestamps[str(scene_id)] = duration
-            print(f"✅ Scene {scene_id} Audio Ready: {duration}s -> {clean_text[:30]}...")
+            print(f"✅ Scene {scene_id} Audio: {duration}s")
         else:
-            print(f"❌ Failed to generate audio for scene {scene_id}")
             timestamps[str(scene_id)] = 4.0
 
     with open(TIMESTAMPS_FILE, "w", encoding="utf-8") as f:
         json.dump(timestamps, f, indent=4)
         
-    print(f"🚀 All Premium Audio Clips Generated Successfully using '{LIVE_VOICE}' voice!")
+    print(f"🚀 All Audio Generated Successfully using SAFE voice: '{LIVE_VOICE}'")
 
 if __name__ == "__main__":
     main()
