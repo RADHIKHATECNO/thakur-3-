@@ -7,7 +7,7 @@ on:
   workflow_dispatch:      # Manual Run Button
 
 permissions:
-  contents: write
+  contents: write       # 🔴 YE ZAROORI HAI NAYA TOPIC REPO MEIN SAVE KARNE KE LIYE
 
 jobs:
   # ==========================================
@@ -62,7 +62,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      max-parallel: 5  # 🔥 5 MACHINES EK SATH CHALENGI!
+      max-parallel: 5  # 🔥 5 MACHINES EK SATH CHALENGI BING PAR!
       matrix:
         scene_id: ${{ fromJson(needs.stage1-brain-voice.outputs.matrix) }}
         
@@ -97,7 +97,7 @@ jobs:
           path: scene_images/
 
   # ==========================================
-  # STAGE 3: LIVE SFX & FFMPEG MASTER ASSEMBLY
+  # STAGE 3: LIVE SFX, ASSEMBLY & AUTO-TOPIC
   # ==========================================
   stage3-assembly:
     needs: stage2-visuals
@@ -113,9 +113,9 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y ffmpeg fonts-liberation
           
-      - name: Install Python Dependencies (Rembg & Assets)
-        # 🔥 YAHAN REMBG ADD KIYA HAI AI CUTOUT KE LIYE
-        run: pip install requests rembg onnxruntime pillow 
+      - name: Install Python Dependencies (Rembg, OpenAI & Assets)
+        # 🔥 YAHAN REMBG (CUTOUT KE LIYE) AUR OPENAI (TOPIC KE LIYE) DONO ADD KIYE HAIN
+        run: pip install requests rembg onnxruntime pillow openai
           
       - name: Download Core Assets
         uses: actions/download-artifact@v4
@@ -129,12 +129,12 @@ jobs:
           pattern: image_scene_*
           merge-multiple: true
           
-      - name: Fetch Live Sound Effects (Freesound)
+      - name: Fetch Live Sound Effects & Auto-BGM (Freesound)
         env:
           FREESOUND_API_KEY: ${{ secrets.FREESOUND_API_KEY }}
         run: python -u fetch_assets.py
         
-      - name: 🎬 Render Final Masterpiece (Parallax + VFX)
+      - name: 🎬 Render Final Masterpiece (Parallax + VFX + Random Anims)
         run: python -u master_assembly.py
         
       - name: 📤 Upload Final Video Artifact
@@ -142,3 +142,19 @@ jobs:
         with:
           name: FINAL_AGENCY_VIDEO
           path: final_output/FINAL_AGENCY_MASTERPIECE.mp4
+
+      # ==========================================
+      # 🔥 THE INFINITE LOOP MAGIC (NEVER TOUCH REPO AGAIN)
+      # ==========================================
+      - name: Generate Next Topic
+        env:
+          XKIRO_API_KEY: ${{ secrets.XKIRO_API_KEY }}
+        run: python -u auto_topic.py
+        
+      - name: Commit & Push Next Topic to GitHub
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add client_setup.json
+          git commit -m "🤖 Auto-updated topic for the next scheduled video!" || echo "No changes to commit"
+          git push
