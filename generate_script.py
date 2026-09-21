@@ -3,139 +3,76 @@ import json
 import time
 from openai import OpenAI
 
-# 1. API Setup
 XKIRO_API_KEY = os.getenv("XKIRO_API_KEY")
+if not XKIRO_API_KEY: exit(1)
 
-if not XKIRO_API_KEY:
-    print("❌ ERROR: XKIRO_API_KEY nahi mili! Kripya GitHub Secrets check karein.")
-    exit(1)
-
-client = OpenAI(
-    api_key=XKIRO_API_KEY,
-    base_url="https://api.xkiro.com/v1" 
-)
+client = OpenAI(api_key=XKIRO_API_KEY, base_url="https://api.xkiro.com/v1")
 
 def load_client_config():
-    with open("client_setup.json", "r", encoding="utf-8") as f:
-        return json.load(f)
+    with open("client_setup.json", "r", encoding="utf-8") as f: return json.load(f)
 
-# 🔥 THE MAGIC: Auto-Fetch Live Models!
 def get_dynamic_models():
-    print("🔍 Scanning xKiro API for live free models...")
     try:
-        models_data = client.models.list()
-        all_models = [m.id for m in models_data.data]
-        print(f"✅ Found {len(all_models)} active models right now!")
-        
-        # Qwen aur DeepSeek JSON ke liye best hote hain, toh unhe priority denge
-        best_keywords = ["qwen", "deepseek", "flash", "claude", "gpt", "llama"]
-        prioritized = []
-        
-        for keyword in best_keywords:
-            for m in all_models:
-                if keyword in m.lower() and m not in prioritized:
-                    prioritized.append(m)
-                    
-        # Baaki bache models bhi add kar do
-        for m in all_models:
-            if m not in prioritized:
-                prioritized.append(m)
-                
-        return prioritized[:15] # Top 15 live models nikal liye
-        
-    except Exception as e:
-        print(f"⚠️ Warning: Auto-fetch failed ({e}). Using smart fallbacks.")
-        # Agar list fetch fail hui, toh ye universal names try karega
-        return ["qwen-2.5-72b", "deepseek-chat", "gpt-4o-mini", "llama-3.1-70b"]
+        all_models = [m.id for m in client.models.list().data]
+        best_keywords = ["qwen", "deepseek", "flash", "gpt", "llama"]
+        prioritized = [m for k in best_keywords for m in all_models if k in m.lower()]
+        return list(dict.fromkeys(prioritized))[:15]
+    except:
+        return ["qwen-2.5-72b", "deepseek-chat", "gpt-4o-mini"]
 
 def generate_cinematic_json(config):
     total_scenes = max(5, int(config["duration_seconds"] / 4))
     
-    system_prompt = """You are a Hollywood-level YouTube Video Director. 
-Your ONLY job is to return a strict, valid JSON array. DO NOT output any markdown like ```json, intro, or outro text. ONLY raw JSON.
-Format required exactly like this:
+    # 🔥 YAHAN MAGIC HAI: AI ab animation bhi decide karega!
+    system_prompt = """You are a Hollywood YouTube Director AND Animator. 
+Return a strict JSON array. Format required:
 [
   {
     "scene": 1,
-    "narration": "Hindi/Hinglish voiceover dialogue here (max 10 words)",
-    "image_prompt": "Highly detailed DALL-E prompt here",
-    "sfx": "thunder"
+    "narration": "Hindi/Hinglish dialogue (max 10 words)",
+    "image_prompt": "Highly detailed DALL-E prompt",
+    "sfx": "thunder",
+    "animation": "Choose ONE based on story context: [fly_up, drive_forward, slide_left, slide_right, float_clouds, zoom_in]"
   }
-]"""
-
-    user_prompt = f"""
-Create a highly engaging script for a {config['video_format']} format video.
-Topic: {config['topic']}
-Total Scenes Required: EXACTLY {total_scenes}
-Art Style for all images: {config['art_style']}
-
-CRITICAL INSTRUCTION FOR IMAGES:
-Every single "image_prompt" MUST include this exact character description: "{config['character_anchor']}"
+]
+RULES FOR ANIMATION:
+- If character is jumping/flying to sky: use 'fly_up'
+- If vehicle/character moving forward on road: use 'drive_forward'
+- If character entering scene: use 'slide_left' or 'slide_right'
+- If dreamy/sky scene: use 'float_clouds'
+- Default: 'zoom_in'
 """
 
-    print(f"🎬 Action! Directing {total_scenes} scenes for {config['client_name']}...")
-    
-    # 🔴 Naya Logic: Sirf live models ko try karega
-    dynamic_models = get_dynamic_models()
+    user_prompt = f"Topic: {config['topic']}\nScenes: {total_scenes}\nArt Style: {config['art_style']}\nAnchor: {config['character_anchor']}"
 
-    for model in dynamic_models:
-        print(f"\n🔄 Trying model: {model}...")
+    print(f"🎬 Directing {total_scenes} Context-Aware scenes...")
+    for model in get_dynamic_models():
+        print(f"🔄 Trying model: {model}...")
         try:
-            response = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=0.7
-            )
+            response = client.chat.completions.create(model=model, messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ], temperature=0.7)
             
-            output_text = response.choices[0].message.content.strip()
-            
-            # 🔥 Auto Markdown Cleaner (Agar AI ne galti se ```json laga diya toh use hata dega)
-            if output_text.startswith("```json"):
-                output_text = output_text[7:]
-            if output_text.startswith("```"):
-                output_text = output_text[3:]
-            if output_text.endswith("```"):
-                output_text = output_text[:-3]
+            output = response.choices[0].message.content.strip()
+            if output.startswith("```json"): output = output[7:]
+            if output.startswith("```"): output = output[3:]
+            if output.endswith("```"): output = output[:-3]
                 
-            output_text = output_text.strip()
-            
-            # JSON validation
-            script_data = json.loads(output_text)
-            
-            # Fix if AI wraps it inside "scenes" dictionary
-            if isinstance(script_data, dict) and "scenes" in script_data:
-                script_data = script_data["scenes"]
+            script_data = json.loads(output.strip())
+            if isinstance(script_data, dict) and "scenes" in script_data: script_data = script_data["scenes"]
                 
-            if isinstance(script_data, list) and len(script_data) > 0:
-                print(f"✅ Success! Generated {len(script_data)} scenes using {model}!")
-                
+            if isinstance(script_data, list):
                 with open("script_data.json", "w", encoding="utf-8") as f:
                     json.dump(script_data, f, indent=4, ensure_ascii=False)
-                    
+                print(f"✅ Success! AI Animator created {len(script_data)} scenes.")
                 return True
-            else:
-                print("⚠️ Invalid JSON output format. Trying next model...")
-
         except Exception as e:
-            # Agar fail hua toh error limit print karke agle model par chala jayega
-            print(f"⚠️ Model Failed: {str(e)[:100]}... Moving to next.")
+            print(f"⚠️ Failed: {str(e)[:50]}")
             time.sleep(2)
-
-    print("\n❌ All available live models failed. Please try again later.")
     return False
 
 if __name__ == "__main__":
-    if not os.path.exists("client_setup.json"):
-        print("❌ ERROR: client_setup.json nahi mili!")
-        exit(1)
-        
-    config = load_client_config()
-    success = generate_cinematic_json(config)
-    
-    if success:
-        print("🚀 JSON Script successfully saved to script_data.json!")
-    else:
-        exit(1)
+    if generate_cinematic_json(load_client_config()):
+        print("🚀 Smart JSON Script Saved!")
+    else: exit(1)
