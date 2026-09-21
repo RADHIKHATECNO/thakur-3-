@@ -8,21 +8,24 @@ AUDIO_DIR = "audio_clips"
 SCRIPT_FILE = "script_data.json"
 TIMESTAMPS_FILE = "audio_timestamps.json"
 
-# 🔥 PERFECT HINDI VOICE (Microsoft's Premium AI)
-VOICE = "hi-IN-MadhurNeural" # Male Storyteller
-RATE = "-5%"  # Thoda slow aur deep
+# 🔥 THE ULTIMATE HINDI VOICE (No more Chinese/Mexican bugs)
+VOICE = "hi-IN-MadhurNeural" # Premium Hindi Male Voice
+RATE = "-5%"  # Thoda slow aur suspenseful
 PITCH = "-2Hz" # Bhaari aawaz
 
 os.makedirs(AUDIO_DIR, exist_ok=True)
 
 async def generate_line_audio(text, filename):
-    try:
-        communicate = edge_tts.Communicate(text, VOICE, rate=RATE, pitch=PITCH)
-        await communicate.save(filename)
-        return True
-    except Exception as e:
-        print(f"⚠️ Error generating audio: {e}")
-        return False
+    for attempt in range(1, 4):
+        try:
+            # Microsoft Edge TTS (100% Free & Unlimited)
+            communicate = edge_tts.Communicate(text, VOICE, rate=RATE, pitch=PITCH)
+            await communicate.save(filename)
+            return True
+        except Exception as e:
+            print(f"⚠️ Edge-TTS Error (Attempt {attempt}): {e}")
+            await asyncio.sleep(2)
+    return False
 
 async def main():
     if not os.path.exists(SCRIPT_FILE):
@@ -39,7 +42,7 @@ async def main():
         scene_id = scene.get("scene")
         text = scene.get("narration")
         
-        # Clean text
+        # Text clean karna taaki aawaz na phate
         clean_text = text.replace("*", "").replace("#", "").strip()
         audio_path = os.path.join(AUDIO_DIR, f"scene_{scene_id}.mp3")
 
