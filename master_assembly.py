@@ -26,6 +26,7 @@ def create_parallax_layers(img_path, scene_id):
     fg_path = os.path.join(IMAGE_DIR, f"scene_{scene_id}_fg.png")
     if not os.path.exists(fg_path):
         try:
+            print(f"✂️ Cutting Character for Scene {scene_id}...")
             with open(img_path, 'rb') as i:
                 with open(fg_path, 'wb') as o: o.write(remove(i.read()))
         except: return img_path, None
@@ -66,7 +67,7 @@ def generate_karaoke_text_filters(text, duration, width, height, client_name):
         f = f"drawtext=fontfile={FONT_FILE}:text='{chunk}':fontcolor={color}:fontsize={fontsize}:borderw=6:bordercolor=black:shadowcolor=black@0.9:shadowx=6:shadowy=6:x=(w-text_w)/2:y={y_pos}:enable='between(t,{start_time},100)'"
         filters.append(f)
         
-    # 🔥 THE WATERMARK ENGINE (Transparent Client Name on Top Right)
+    # Watermark
     wm_size = 45 if width == 1080 else 60
     watermark = f"drawtext=fontfile={FONT_FILE}:text='{client_name}':fontcolor=white@0.4:fontsize={wm_size}:x=w-text_w-30:y=30"
     filters.append(watermark)
@@ -84,22 +85,29 @@ def create_scene_clip(scene_id, scene_data, duration, width, height, client_name
     out_path = os.path.join(OUTPUT_DIR, f"clip_{scene_id}.mp4")
     
     has_char = has_valid_character(fg_path)
-    scale_crop = f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}"
+    
+    # 🔥 FIX 1: EXACT 9:16 MATHEMATICAL CROP (No Side Borders/Black bars)
+    scale_crop = f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}:(iw-ow)/2:(ih-oh)/2"
     
     if has_char:
+        # Background pan
         bg_filter = f"[0:v]{scale_crop},zoompan=z='min(zoom+0.0003,1.1)':d={frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps=25[bg];"
-        fg_filter = f"[1:v]{scale_crop},format=rgba[fg];[bg][fg]overlay=0:'5*sin(t*3)'[comp];"
+        
+        # 🔥 FIX 2: FAST TALKING VIBRATION (X aur Y dono axis par tezi se hilega)
+        # 3*sin(t*15) = Left/Right vibration, 6*sin(t*20) = Up/Down fast talking vibration
+        fg_filter = f"[1:v]{scale_crop},format=rgba[fg];[bg][fg]overlay='3*sin(t*15)':'6*sin(t*20)'[comp];"
+        
         v_filter_base = bg_filter + fg_filter
         cmd = ["ffmpeg", "-y", "-loop", "1", "-i", img_path, "-loop", "1", "-i", fg_path]
         audio_idx, sfx_idx = 2, 3
     else:
+        # Fallback Scenery
         v_filter_base = f"[0:v]{scale_crop},zoompan=z='min(zoom+0.0006,1.15)':d={frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps=25[comp];"
         cmd = ["ffmpeg", "-y", "-loop", "1", "-i", img_path]
         audio_idx, sfx_idx = 1, 2
 
     cmd.extend(["-i", audio_path])
     
-    # Add Text + Watermark
     text_filters = generate_karaoke_text_filters(text, duration, width, height, client_name)
     v_filter = v_filter_base + f"[comp]{text_filters}[v_out]"
 
@@ -114,7 +122,7 @@ def create_scene_clip(scene_id, scene_data, duration, width, height, client_name
         
     cmd.extend(["-c:v", "libx264", "-c:a", "aac", "-b:a", "192k", "-ar", "44100", "-ac", "2", "-t", str(visual_duration), "-pix_fmt", "yuv420p", "-preset", "fast", out_path])
     
-    print(f"🎬 Rendering Scene {scene_id} [Watermark added: {client_name}]...")
+    print(f"🎬 Rendering Scene {scene_id} [Fast Vibrate & Perfect Crop]...")
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return out_path
 
@@ -152,7 +160,7 @@ def main():
     else:
         os.rename(temp_video, final_output)
         
-    print(f"🎉 BOOM! Video with Watermark & Perfect Audio Ready: {final_output}")
+    print(f"🎉 BOOM! Video with Perfect Crop & Talk-Vibration Ready: {final_output}")
 
 if __name__ == "__main__":
     main()
