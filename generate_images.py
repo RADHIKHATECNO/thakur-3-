@@ -5,7 +5,6 @@ import json
 import re
 import requests
 from playwright.async_api import async_playwright
-from PIL import Image, ImageFilter
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 CHAT_ID = os.getenv("CHAT_ID", "")
@@ -31,40 +30,12 @@ async def live_screenshot_tracker(page, scene_id, stop_event):
             sec += 10
         except: pass
 
-def smart_crop_image(raw_path, out_path, video_format, scene_id):
-    try:
-        img = Image.open(raw_path).convert("RGB")
-        orig_w, orig_h = img.size
-        
-        target_w, target_h = (1080, 1920) if video_format.lower() == "short" else (1920, 1080)
-
-        bg = img.resize((target_w, target_h), Image.Resampling.LANCZOS)
-        bg = bg.filter(ImageFilter.GaussianBlur(30))
-
-        if video_format.lower() == "short":
-            new_w = target_w
-            new_h = int((new_w / orig_w) * orig_h)
-            offset_x, offset_y = 0, (target_h - new_h) // 2
-        else:
-            new_h = target_h
-            new_w = int((new_h / orig_h) * orig_w)
-            offset_x, offset_y = (target_w - new_w) // 2, 0
-
-        fg = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-        bg.paste(fg, (offset_x, offset_y))
-        bg.save(out_path, format="JPEG", quality=98)
-        
-        send_telegram_photo(out_path, f"✅ [Scene {scene_id}] HD {video_format.upper()} Frame Ready!")
-    except Exception as e:
-        print(f"⚠️ Crop failed: {e}")
-
 async def generate_single_image(scene_id, prompt_text, video_format):
     out_img_path = os.path.join(SAVE_FOLDER, f"scene_{scene_id}.jpg")
-    raw_img_path = os.path.join(SAVE_FOLDER, f"scene_{scene_id}_raw.jpg") # Original for AI Cutout!
     
-    if os.path.exists(out_img_path):
-        return True
+    if os.path.exists(out_img_path): return True
 
+    # Bing safety limit
     clean_prompt = re.sub(r'--ar\s+\d+:\d+', '', prompt_text).strip()[:450]
     
     async with async_playwright() as p:
@@ -93,13 +64,12 @@ async def generate_single_image(scene_id, prompt_text, video_format):
                     await download_btn.click()
                 
                 download = await download_info.value
-                # SAVE RAW FOR CUTOUT
-                await download.save_as(raw_img_path)
+                # Direct save RAW for perfect FFmpeg crop
+                await download.save_as(out_img_path)
                 stop_tracker.set()
                 await browser.close()
                 
-                # CROP FOR BACKGROUND
-                smart_crop_image(raw_img_path, out_img_path, video_format, scene_id)
+                send_telegram_photo(out_img_path, f"✅ [Scene {scene_id}] RAW HD Image Downloaded Perfectly!")
                 return True 
             except Exception as e:
                 stop_tracker.set()
