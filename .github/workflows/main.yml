@@ -4,7 +4,7 @@ on:
   schedule:
     - cron: '30 00 * * *' # Subah 5:00 Baje (IST)
     - cron: '30 12 * * *' # Shaam 8:00 Baje (IST)
-  workflow_dispatch:      # Jab chahe manually Run dabayein
+  workflow_dispatch:      # Manual Run Button
 
 permissions:
   contents: write
@@ -62,7 +62,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      max-parallel: 1  # 🔴 BING BAN SE BACHNE KE LIYE (1 by 1)
+      max-parallel: 5  # 🔥 5 MACHINES EK SATH CHALENGI!
       matrix:
         scene_id: ${{ fromJson(needs.stage1-brain-voice.outputs.matrix) }}
         
@@ -75,7 +75,7 @@ jobs:
           
       - name: Install Playwright & Pillow
         run: |
-          pip install playwright pillow
+          pip install requests playwright pillow
           playwright install chromium
           playwright install-deps chromium
           
@@ -85,6 +85,9 @@ jobs:
           name: core-assets
           
       - name: Scrape & Auto-Crop Image
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
         run: python -u generate_images.py ${{ matrix.scene_id }}
         
       - name: Upload Scene Image
