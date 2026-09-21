@@ -14,14 +14,11 @@ def generate_voiceover():
         print(f"❌ {PROMPT_FILE} not found!")
         sys.exit(1)
 
-    # 1. Text read karna aur DOUBLE SAFETY ke liye Numbers delete karna
     lines = []
     with open(PROMPT_FILE, "r", encoding="utf-8") as f:
         for line in f:
             if "|" in line:
-                # Sirf Voiceover wali line nikalna
                 vo_line = line.split("|")[0].strip()
-                # Agar galti se 1. 2. reh gaya ho, to yahan se bhi hatega
                 vo_line = re.sub(r'^[\d\.\-\*\s]+', '', vo_line)
                 lines.append(vo_line)
                 
@@ -35,9 +32,8 @@ def generate_voiceover():
     # 🔴 YAHAN APNI ELEVENLABS KI API KEY DAALEIN
     API_KEY = "sk_1ecaa2d5885b536edb08427096f606a9fd1d89fe51a9d90f"
     
-    # 🔴 YAHAN APNI PASAND KI VOICE ID DAALEIN
-    # (Abhi maine 'Adam' ki ID dali hai jo storytelling ke liye bahut acchi hai)
-    VOICE_ID = "eyVoIoi3vo6sJoHOKgAc" 
+    # 🔴 DEFAULT FREE VOICE ID (Adam - 100% API Free)
+    VOICE_ID = "N2lVS1w4EtoT3dr4eOWO" 
     
     url = f"https://api.elevenlabs.io/v1/text-to-speech/{VOICE_ID}"
     headers = {
