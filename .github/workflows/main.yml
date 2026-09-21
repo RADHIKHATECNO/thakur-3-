@@ -7,11 +7,11 @@ on:
   workflow_dispatch:      # Manual Run Button
 
 permissions:
-  contents: write       # 🔴 YE ZAROORI HAI NAYA TOPIC REPO MEIN SAVE KARNE KE LIYE
+  contents: write       # 🔴 NAYA TOPIC REPO MEIN SAVE KARNE KE LIYE ZAROORI
 
 jobs:
   # ==========================================
-  # STAGE 1: BRAIN (JSON) & VOICE (EDGE-TTS)
+  # STAGE 1: BRAIN (JSON) & VOICE (xKIRO AUTO-FALLBACK)
   # ==========================================
   stage1-brain-voice:
     runs-on: ubuntu-latest
@@ -23,7 +23,8 @@ jobs:
           python-version: '3.10'
           
       - name: Install Stage 1 Dependencies
-        run: pip install openai edge-tts mutagen requests
+        # 🔥 edge-tts hata diya gaya hai! Sirf openai, mutagen, requests bache hain.
+        run: pip install openai mutagen requests
         
       - name: Run AI Director (Generate JSON Script)
         env:
@@ -31,6 +32,8 @@ jobs:
         run: python -u generate_script.py
         
       - name: Generate Voiceover & Timestamps
+        env:
+          XKIRO_API_KEY: ${{ secrets.XKIRO_API_KEY }}
         run: python -u generate_audio.py
         
       - name: Calculate Dynamic Matrix for Images
@@ -114,7 +117,7 @@ jobs:
           sudo apt-get update && sudo apt-get install -y ffmpeg fonts-liberation
           
       - name: Install Python Dependencies (Rembg, OpenAI & Assets)
-        # 🔥 YAHAN REMBG (CUTOUT KE LIYE) AUR OPENAI (TOPIC KE LIYE) DONO ADD KIYE HAIN
+        # 🔥 CUTOUT (rembg) AUR TOPIC GEN (openai) YAHAN BHI INSTALLED HAIN
         run: pip install requests rembg onnxruntime pillow openai
           
       - name: Download Core Assets
