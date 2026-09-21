@@ -7,11 +7,11 @@ on:
   workflow_dispatch:      # Manual Run Button
 
 permissions:
-  contents: write       # 🔴 NAYA TOPIC REPO MEIN SAVE KARNE KE LIYE ZAROORI
+  contents: write       
 
 jobs:
   # ==========================================
-  # STAGE 1: BRAIN (JSON) & VOICE (xKIRO AUTO-FALLBACK)
+  # STAGE 1: BRAIN (JSON) & VOICE (EDGE-TTS)
   # ==========================================
   stage1-brain-voice:
     runs-on: ubuntu-latest
@@ -23,8 +23,8 @@ jobs:
           python-version: '3.10'
           
       - name: Install Stage 1 Dependencies
-        # 🔥 edge-tts hata diya gaya hai! Sirf openai, mutagen, requests bache hain.
-        run: pip install openai mutagen requests
+        # 🔥 FIX: Yahan edge-tts wapas add kar diya hai!
+        run: pip install openai edge-tts mutagen requests
         
       - name: Run AI Director (Generate JSON Script)
         env:
@@ -32,14 +32,11 @@ jobs:
         run: python -u generate_script.py
         
       - name: Generate Voiceover & Timestamps
-        env:
-          XKIRO_API_KEY: ${{ secrets.XKIRO_API_KEY }}
         run: python -u generate_audio.py
         
       - name: Calculate Dynamic Matrix for Images
         id: set-matrix
         run: |
-          # script_data.json padh kar automatically total scenes nikalega
           MATRIX_JSON=$(python3 -c "import json; scenes=json.load(open('script_data.json')); print(json.dumps([s['scene'] for s in scenes]))")
           echo "✅ Scenes Found: $MATRIX_JSON"
           echo "matrix=$MATRIX_JSON" >> $GITHUB_OUTPUT
@@ -65,7 +62,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      max-parallel: 5  # 🔥 5 MACHINES EK SATH CHALENGI BING PAR!
+      max-parallel: 5  # 🔥 5 MACHINES EK SATH
       matrix:
         scene_id: ${{ fromJson(needs.stage1-brain-voice.outputs.matrix) }}
         
@@ -116,8 +113,7 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y ffmpeg fonts-liberation
           
-      - name: Install Python Dependencies (Rembg, OpenAI & Assets)
-        # 🔥 CUTOUT (rembg) AUR TOPIC GEN (openai) YAHAN BHI INSTALLED HAIN
+      - name: Install Python Dependencies (Rembg, OpenAI, Pillow & Assets)
         run: pip install requests rembg onnxruntime pillow openai
           
       - name: Download Core Assets
@@ -137,7 +133,7 @@ jobs:
           FREESOUND_API_KEY: ${{ secrets.FREESOUND_API_KEY }}
         run: python -u fetch_assets.py
         
-      - name: 🎬 Render Final Masterpiece (Parallax + VFX + Random Anims)
+      - name: 🎬 Render Final Masterpiece (Smart Parallax + VFX)
         run: python -u master_assembly.py
         
       - name: 📤 Upload Final Video Artifact
@@ -147,7 +143,7 @@ jobs:
           path: final_output/FINAL_AGENCY_MASTERPIECE.mp4
 
       # ==========================================
-      # 🔥 THE INFINITE LOOP MAGIC (NEVER TOUCH REPO AGAIN)
+      # 🔥 THE INFINITE LOOP MAGIC
       # ==========================================
       - name: Generate Next Topic
         env:
