@@ -35,37 +35,35 @@ def get_dynamic_models():
 def generate_cinematic_json(config):
     total_scenes = max(4, int(config["duration_seconds"] / 4))
     
+    # 🔥 MAGIC FIX: Now AI only writes the action. We lock the character in Python!
     system_prompt = f"""You are a master Hollywood Film Director and After Effects VFX Expert.
 Your job is to direct a highly intense and emotional {total_scenes}-scene short-form story based on the client's topic.
 
-You must output ONLY a valid, raw JSON object (not an array, a single object) containing the complete editing timeline. DO NOT output any markdown tags like ```json, intro, or outro.
+You must output ONLY a valid, raw JSON array containing the complete editing timeline. DO NOT output any markdown tags.
 
 Required JSON Structure:
-{{
-  "scenes": [
+[
     {{
       "scene": 1,
       "narration": "Hindi/Hinglish dialogue here (max 8 words)",
-      "image_prompt": "Concise English description (MAX 250 CHARACTERS)",
+      "action_only": "Concise English description of ONLY the background and what is happening (MAX 100 CHARACTERS). DO NOT describe the character's looks, just what they are doing.",
       "parallax": true,
       "camera": "Choose ONE: [fast_zoom, zoom_out, smooth_pan, shake]",
       "sfx": "Choose ONE: [whoosh, thunder_blast, heartbeat, metal_clang, horror_drone]",
       "sfx_delay_ms": 500,
       "vfx_effect": "Choose ONE: [white_flash, vignette_glow, none]"
     }}
-  ]
-}}
+]
 
 STRICT EDITING RULES:
-1. "parallax": Set to true ONLY if there is a clear character/subject in the frame that should dynamically pop-out from the background.
-2. "sfx_delay_ms": Define the exact delay in milliseconds when the sound effect should trigger (e.g., 500ms means the whoosh sound triggers exactly when the character slides in).
-3. "vfx_effect": Set 'white_flash' on dramatic climax beats, or 'vignette_glow' on slow, scary, suspenseful scenes.
-4. Keep the combined "image_prompt" under 250 characters! Include art style: '{config.get('art_style', '')}' and anchor: '{config.get('character_anchor', '')}' briefly.
+1. "parallax": Set to true ONLY if the character is clearly visible and doing an action.
+2. "sfx_delay_ms": Define the exact delay in milliseconds when the sound effect should trigger.
+3. Keep "action_only" under 100 characters!
 """
 
     user_prompt = f"Create the ultimate timeline script for: {config.get('topic')}"
 
-    print(f"🎬 Directing {total_scenes} timeline scenes...")
+    print(f"🎬 Directing {total_scenes} timeline scenes (With Hard-Locked Character Consistency)...")
     
     models = get_dynamic_models()
     for model in models:
@@ -88,14 +86,25 @@ STRICT EDITING RULES:
                 
             script_data = json.loads(output)
             
-            # Formatting validation
             if isinstance(script_data, dict) and "scenes" in script_data:
-                scenes_list = script_data["scenes"]
-                if isinstance(scenes_list, list) and len(scenes_list) > 0:
-                    with open("script_data.json", "w", encoding="utf-8") as f:
-                        json.dump(scenes_list, f, indent=4, ensure_ascii=False)
-                    print(f"✅ Success! Generated {len(scenes_list)} highly dynamic scenes using {model}.")
-                    return True
+                script_data = script_data["scenes"]
+                
+            if isinstance(script_data, list) and len(script_data) > 0:
+                
+                # 🔥 THE UNBREAKABLE LOCK: Python injects identical style and character into every prompt!
+                art_style = config.get("art_style", "")
+                anchor = config.get("character_anchor", "")
+                
+                for scene in script_data:
+                    action = scene.get("action_only", "standing still")
+                    # DALL-E 3 will read this exact same prefix every single time!
+                    scene["image_prompt"] = f"{art_style}. Character: {anchor}. Action and Scene: {action}"
+                
+                with open("script_data.json", "w", encoding="utf-8") as f:
+                    json.dump(script_data, f, indent=4, ensure_ascii=False)
+                print(f"✅ Success! Generated {len(script_data)} highly consistent scenes using {model}.")
+                return True
+                
         except Exception as e:
             print(f"⚠️ Failed with {model}: {str(e)[:100]}")
             time.sleep(2)
@@ -105,7 +114,7 @@ STRICT EDITING RULES:
 if __name__ == "__main__":
     config = load_client_config()
     if generate_cinematic_json(config): 
-        print("🚀 Master Timeline JSON Saved!")
+        print("🚀 Master Timeline JSON Saved with Perfect Consistency!")
     else:
         print("❌ CRITICAL ERROR: Script generation failed. Stopping pipeline.")
         sys.exit(1)
