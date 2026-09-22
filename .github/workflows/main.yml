@@ -6,7 +6,6 @@ on:
     - cron: '30 12 * * *' # Shaam 8:00 Baje (IST)
   workflow_dispatch:      # Manual Run Button
 
-# permissions configured to write next topics on repo
 permissions:
   contents: write       
   actions: read         
@@ -37,7 +36,7 @@ jobs:
         
       - name: Generate Voiceover & Timestamps (Gnani.ai)
         env:
-          GNANI_API_KEY: ${{ secrets.GNANI_API_KEY }} # 🔥 Official Gnani API Key configured here!
+          GNANI_API_KEY: ${{ secrets.GNANI_API_KEY }}
         run: python -u generate_audio.py
         
       - name: Calculate Dynamic Matrix for Images
@@ -72,7 +71,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      max-parallel: 5  # 🔥 5 MACHINES RUNNING IN PARALLEL FOR BING SCALING!
+      max-parallel: 5  # 🔥 5 MACHINES RUNNING IN PARALLEL!
       matrix:
         scene_id: ${{ fromJson(needs.stage1-brain-voice.outputs.matrix) }}
         
@@ -123,7 +122,7 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y ffmpeg fonts-liberation
           
-      - name: Install Python Dependencies (OpenCV, Rembg, etc.)
+      - name: Install Python Dependencies
         run: pip install requests rembg onnxruntime pillow openai opencv-python-headless
           
       - name: Download Core Assets
@@ -143,7 +142,7 @@ jobs:
           FREESOUND_API_KEY: ${{ secrets.FREESOUND_API_KEY }}
         run: python -u fetch_assets.py
         
-      - name: 🎬 Render Final Masterpiece (Smooth Pacing + Talk-Vibration)
+      - name: 🎬 Render Final Masterpiece (VFX + Parallax + 8D Audio)
         run: python -u master_assembly.py
         
       - name: 📤 Upload Final Video Artifact
@@ -153,7 +152,7 @@ jobs:
           path: final_output/FINAL_AGENCY_MASTERPIECE.mp4
 
       # ==========================================
-      # 🔥 THE INFINITE LOOP AUTO-TOPIC ENGINE
+      # 🔥 THE INFINITE LOOP MAGIC
       # ==========================================
       - name: Generate Next Topic
         env:
