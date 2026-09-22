@@ -35,7 +35,7 @@ def get_dynamic_models():
 def generate_cinematic_json(config):
     total_scenes = max(4, int(config["duration_seconds"] / 4))
     
-    # 🔥 MAGIC FIX: Now AI only writes the action. We lock the character in Python!
+    # 🔥 AI DIRECTS THE CAMERA AND ACTIONS (No style or character generation by AI)
     system_prompt = f"""You are a master Hollywood Film Director and After Effects VFX Expert.
 Your job is to direct a highly intense and emotional {total_scenes}-scene short-form story based on the client's topic.
 
@@ -46,24 +46,22 @@ Required JSON Structure:
     {{
       "scene": 1,
       "narration": "Hindi/Hinglish dialogue here (max 8 words)",
-      "action_only": "Concise English description of ONLY the background and what is happening (MAX 100 CHARACTERS). DO NOT describe the character's looks, just what they are doing.",
+      "action_only": "Concise English description of ONLY the background and what is happening (MAX 80 CHARACTERS). Just physical actions.",
       "parallax": true,
       "camera": "Choose ONE: [fast_zoom, zoom_out, smooth_pan, shake]",
-      "sfx": "Choose ONE: [whoosh, thunder_blast, heartbeat, metal_clang, horror_drone]",
+      "sfx": "Choose ONE: [whoosh, thunder_blast, heartbeat, metal_clang, horror_drone, magical_chime]",
       "sfx_delay_ms": 500,
       "vfx_effect": "Choose ONE: [white_flash, vignette_glow, none]"
     }}
 ]
 
 STRICT EDITING RULES:
-1. "parallax": Set to true ONLY if the character is clearly visible and doing an action.
-2. "sfx_delay_ms": Define the exact delay in milliseconds when the sound effect should trigger.
-3. Keep "action_only" under 100 characters!
+1. Keep "action_only" UNDER 80 characters! Do not describe the character's face or clothes, JUST the action (e.g., "looking at glowing blue diamonds on cracked dry earth").
 """
 
     user_prompt = f"Create the ultimate timeline script for: {config.get('topic')}"
 
-    print(f"🎬 Directing {total_scenes} timeline scenes (With Hard-Locked Character Consistency)...")
+    print(f"🎬 Directing {total_scenes} timeline scenes (With Hard-Locked Style & Character)...")
     
     models = get_dynamic_models()
     for model in models:
@@ -91,18 +89,22 @@ STRICT EDITING RULES:
                 
             if isinstance(script_data, list) and len(script_data) > 0:
                 
-                # 🔥 THE UNBREAKABLE LOCK: Python injects identical style and character into every prompt!
                 art_style = config.get("art_style", "")
                 anchor = config.get("character_anchor", "")
                 
+                # 🔥 THE ULTIMATE STYLE & CHARACTER LOCK (Key-Value Format)
+                # DALL-E 3 treats this format as strict instructions rather than a loose story.
                 for scene in script_data:
                     action = scene.get("action_only", "standing still")
-                    # DALL-E 3 will read this exact same prefix every single time!
-                    scene["image_prompt"] = f"{art_style}. Character: {anchor}. Action and Scene: {action}"
+                    
+                    # Bing Image Creator strictly follows [ART STYLE], [SUBJECT], [ACTION] format
+                    strict_prompt = f"ART STYLE: {art_style}. SUBJECT: {anchor}. ACTION AND BACKGROUND: {action}."
+                    
+                    scene["image_prompt"] = strict_prompt
                 
                 with open("script_data.json", "w", encoding="utf-8") as f:
                     json.dump(script_data, f, indent=4, ensure_ascii=False)
-                print(f"✅ Success! Generated {len(script_data)} highly consistent scenes using {model}.")
+                print(f"✅ Success! Generated {len(script_data)} strictly style-locked scenes using {model}.")
                 return True
                 
         except Exception as e:
@@ -114,7 +116,7 @@ STRICT EDITING RULES:
 if __name__ == "__main__":
     config = load_client_config()
     if generate_cinematic_json(config): 
-        print("🚀 Master Timeline JSON Saved with Perfect Consistency!")
+        print("🚀 Master Timeline JSON Saved with PERFECT Style Consistency!")
     else:
         print("❌ CRITICAL ERROR: Script generation failed. Stopping pipeline.")
         sys.exit(1)
