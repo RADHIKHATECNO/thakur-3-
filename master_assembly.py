@@ -62,7 +62,10 @@ def get_video_config():
     with open(CONFIG_FILE, "r") as f:
         data = json.load(f)
         fmt = data.get("video_format", "long").lower()
-        return (1080, 1920) if fmt == "short" else (1920, 1080), data.get("client_name", "@AgencyVideo")
+        # 🔥 FIX: Yahan return variables properly unpack honge ab!
+        width, height = (1080, 1920) if fmt == "short" else (1920, 1080)
+        client_name = data.get("client_name", "@AgencyVideo")
+        return width, height, client_name
 
 def generate_karaoke_text(text, duration, width, height, client_name):
     words = text.replace("'", "").replace(":", r"\:").split()
@@ -141,7 +144,6 @@ def create_scene_clip(scene_id, scene_data, duration, width, height, client_name
     # 🔊 LOUD 8D AUDIO SYNC
     if os.path.exists(sfx_path):
         cmd.extend(["-i", sfx_path])
-        # Voice (150%), SFX (100% with delay)
         sfx_delay = scene_data.get("sfx_delay_ms", 300)
         a_filter = f"[{a_idx}:a]volume=1.5[voice];[{sfx_idx}:a]adelay={sfx_delay}|{sfx_delay},volume=1.0[sfx];[voice][sfx]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[a_out]"
         cmd.extend(["-filter_complex", f"{v_filter};{a_filter}", "-map", "[v_out]", "-map", "[a_out]"])
