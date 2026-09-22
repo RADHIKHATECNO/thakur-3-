@@ -2,7 +2,6 @@ import os
 import json
 import time
 import requests
-import base64
 import subprocess
 from mutagen.mp3 import MP3
 
@@ -20,18 +19,19 @@ if not GNANI_API_KEY:
 os.makedirs(AUDIO_DIR, exist_ok=True)
 
 def generate_full_story_audio(full_text, output_wav):
-    # Gnani.ai official REST API URL for TTS
     url = "https://api.vachana.ai/api/v1/tts/inference"
     headers = {
         "Content-Type": "application/json",
         "X-API-Key-ID": GNANI_API_KEY
     }
     
-    # 🔥 FIXED: Using 'timbre-v2.5' model as per latest documentation!
+    # Strictly matching the official timbre-v2.5 schema for 'Deepak' with hi-IN language
     data = {
         "text": full_text,
         "voice": "Deepak",          # Deepak Voice (Pure Hindi Male)
-        "model": "timbre-v2.5",     # UPDATED TO THE LATEST SUPPORTED MODEL!
+        "model": "timbre-v2.5",     # Latest timbre-v2.5 model
+        "language": "hi-IN",        # Required for timbre-v2.5 multilingual voices!
+        "speed": 0.95,              # Suspense aur depth ke liye perfect speed
         "audio_config": {
             "sample_rate": 44100,   
             "encoding": "linear_pcm",
@@ -41,21 +41,19 @@ def generate_full_story_audio(full_text, output_wav):
     
     for attempt in range(1, 4):
         try:
-            print(f"📡 Requesting Gnani.ai for One-Shot Voiceover with 'Deepak' using timbre-v2.5...")
+            print(f"📡 Requesting Gnani.ai for One-Shot Voiceover with 'Deepak' (timbre-v2.5)...")
             response = requests.post(url, headers=headers, json=data, timeout=60)
             
+            # 🔥 THE FIX: Gnani REST API returns direct RAW binary wav! No JSON decoding needed!
             if response.status_code == 200:
-                resp_json = response.json()
-                audio_base64 = resp_json.get("audio", "")
-                if audio_base64:
-                    audio_data = base64.b64decode(audio_base64)
-                    with open(output_wav, "wb") as f:
-                        f.write(audio_data)
-                    return True
+                print("✅ Successfully received raw binary audio from Gnani.ai!")
+                with open(output_wav, "wb") as f:
+                    f.write(response.content) # Writing direct binary bytes
+                return True
             else:
-                print(f"⚠️ Gnani.ai TTS Error: {response.text}")
+                print(f"⚠️ Gnani.ai TTS Error: Status {response.status_code} | Details: {response.text}")
         except Exception as e:
-            print(f"⚠️ Connection/Decoding Failed: {e}")
+            print(f"⚠️ Connection Failed: {e}")
             
         time.sleep(3)
     return False
@@ -68,12 +66,11 @@ def main():
     with open(SCRIPT_FILE, "r", encoding="utf-8") as f:
         scenes = json.load(f)
 
-    # 1. Puri script ka ek continuous paragraph banana (Pause markers ke sath)
+    # 1. Join all scene narrations into one continuous paragraph
     full_text_list = []
     for scene in scenes:
         narration = scene.get("narration", "").strip()
         if narration:
-            # Natural pauses ke liye commas/periods handle karna
             if not narration.endswith(('.', '!', '?', ',')):
                 narration += "."
             full_text_list.append(narration)
@@ -83,14 +80,14 @@ def main():
     
     full_wav_path = os.path.join(AUDIO_DIR, "full_story.wav")
     
-    # 2. Continuous voice generation (Pure continuous human flow)
+    # 2. Call Gnani API for raw WAV file
     success = generate_full_story_audio(full_text, full_wav_path)
     
     if not success or not os.path.exists(full_wav_path):
         print("❌ Failed to generate full story audio.")
         exit(1)
         
-    # WAV to MP3 conversion using FFmpeg
+    # Convert Full WAV to High Quality MP3 via FFmpeg
     full_mp3_path = os.path.join(AUDIO_DIR, "full_story.mp3")
     subprocess.run([
         "ffmpeg", "-y", "-i", full_wav_path, 
@@ -98,11 +95,12 @@ def main():
         full_mp3_path
     ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     
+    # Read MP3 metadata to calculate exact duration
     audio = MP3(full_mp3_path)
     total_duration = audio.info.length
     print(f"✅ Full Audio generated successfully! Duration: {round(total_duration, 2)} seconds.")
     
-    # 3. Slicing logic for each scene proportionate to text length
+    # 3. Cut master MP3 into small scene clips
     timestamps = {}
     total_chars = len(full_text)
     current_time = 0.0
@@ -114,11 +112,10 @@ def main():
         
         scene_char_count = len(scene_text)
         scene_duration = (scene_char_count / total_chars) * total_duration
-        scene_duration = round(scene_duration + 0.3, 2) # Added pause buffer
+        scene_duration = round(scene_duration + 0.3, 2) # Adding brief pause buffer
         
         timestamps[scene_id] = scene_duration
         
-        # Split main file into small scene MP3 files
         scene_wav_output = os.path.join(AUDIO_DIR, f"scene_{scene_id}.mp3")
         subprocess.run([
             "ffmpeg", "-y", "-ss", str(current_time), "-t", str(scene_duration), 
@@ -132,7 +129,7 @@ def main():
     if os.path.exists(full_wav_path): os.remove(full_wav_path)
     if os.path.exists(full_mp3_path): os.remove(full_mp3_path)
 
-    # Save exact timestamps for FFmpeg
+    # Save calculated timestamps
     with open(TIMESTAMPS_FILE, "w", encoding="utf-8") as f:
         json.dump(timestamps, f, indent=4)
         
